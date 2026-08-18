@@ -1,0 +1,6 @@
+{
+  "name": "Chess Royale",
+  "description": "Tactical chess battler with ranked arenas, hero powers, clan wars, and deck building in an Elegant Dark theme.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
