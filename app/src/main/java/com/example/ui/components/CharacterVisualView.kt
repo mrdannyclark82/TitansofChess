@@ -178,6 +178,8 @@ fun LivingCharacterPortrait(
 ) {
     val charInfo = remember(cardId) { CharacterIdentity.fromIdOrSymbol(cardId) }
     val infiniteTransition = rememberInfiniteTransition(label = "char_portrait_anim")
+    
+    val tiltOffset = rememberDeviceTilt(sensitivity = 4f)
 
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.96f,
@@ -216,7 +218,13 @@ fun LivingCharacterPortrait(
     ) {
         // Rotating Magical Aura Ring
         if (showAura) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = auraRotation
+                    }
+            ) {
                 val center = Offset(this.size.width / 2, this.size.height / 2)
                 val radius = this.size.minDimension * 0.42f
                 val color = charInfo.primaryColor.copy(alpha = 0.4f)
@@ -237,11 +245,17 @@ fun LivingCharacterPortrait(
             }
         }
 
-        // Central Character Graphic Composition
+        // Central Character Graphic Composition with Breathing and Parallax
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.scale(pulseScale)
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                    translationX = tiltOffset.value.x
+                    translationY = tiltOffset.value.y
+                }
         ) {
             Box(contentAlignment = Alignment.Center) {
                 // Character Weapon / Element Embellishment
@@ -273,6 +287,8 @@ fun TacticalBattlePieceToken(
 
     val teamGlowColor = if (isPlayerPiece) Color(0xFF64B5F6) else Color(0xFFFF5252)
     val teamBadgeColor = if (isPlayerPiece) Color(0xFF1E88E5) else Color(0xFFD32F2F)
+
+    val tiltOffset = rememberDeviceTilt(sensitivity = 6f)
 
     val infiniteTransition = rememberInfiniteTransition(label = "piece_token_anim")
     val floatOffset by infiniteTransition.animateFloat(
@@ -334,11 +350,15 @@ fun TacticalBattlePieceToken(
                     .background(teamGlowColor)
             )
 
-            // Character Living Emoji / Avatar
+            // Character Living Emoji / Avatar with Parallax + Breathing Float
             Text(
                 text = charInfo.characterEmoji,
                 fontSize = 16.sp,
                 modifier = Modifier
+                    .graphicsLayer {
+                        translationX = tiltOffset.value.x
+                        translationY = tiltOffset.value.y
+                    }
                     .offset(y = floatOffset.dp)
                     .shadow(4.dp, CircleShape, ambientColor = charInfo.weaponGlowColor, spotColor = charInfo.primaryColor)
             )

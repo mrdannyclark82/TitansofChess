@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import android.os.Build
+import android.graphics.RenderEffect
+import android.graphics.RuntimeShader
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -28,9 +31,52 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import com.example.ui.theme.*
 import kotlin.math.cos
 import kotlin.math.sin
+
+import org.intellij.lang.annotations.Language
+
+@Language("AGSL")
+const val HOLOGRAPHIC_AGSL_SHADER = """
+    uniform float2 resolution;
+    uniform float time;
+    uniform float2 tiltOffset;
+    uniform shader contents;
+    
+    half4 main(in float2 fragCoord) {
+        half4 color = contents.eval(fragCoord);
+        if (color.a == 0.0) return color;
+        
+        float2 uv = fragCoord / resolution;
+        
+        // 2.5D Parallax distortion for the holographic foil based on tilt
+        float2 parallaxUv = uv + (tiltOffset / resolution) * 0.5;
+        
+        // Wavy iridescent pattern
+        float wave1 = sin(parallaxUv.x * 12.0 + time * 3.0) * 0.5 + 0.5;
+        float wave2 = cos(parallaxUv.y * 15.0 - time * 2.5) * 0.5 + 0.5;
+        float combinedWave = wave1 * wave2;
+        
+        // Spectral color shift
+        half3 spectral = half3(
+            sin(combinedWave * 6.0 + time) * 0.5 + 0.5,
+            cos(combinedWave * 5.0 + time * 1.3) * 0.5 + 0.5,
+            sin(combinedWave * 4.0 - time * 0.8) * 0.5 + 0.5
+        );
+        
+        // Specular highlight sweep
+        float swipe = uv.x + uv.y;
+        float highlight = smoothstep(0.4, 0.6, sin(swipe * 5.0 - time * 4.0 + tiltOffset.x * 0.05) * 0.5 + 0.5);
+        
+        // Add subtle chromatic distortion to the base color
+        half4 finalColor = color + half4(spectral * 0.3 * color.a, 0.0) + half4(highlight * 0.4 * color.a);
+        
+        // Blend original content with holographic additions
+        return mix(color, finalColor, 0.6);
+    }
+"""
 
 /**
  * Iridescent Color Palettes for Holographic Foil Effects by Rarity
@@ -120,43 +166,77 @@ fun Modifier.holographicFoil(
 
     val foilColors = remember(rarity) { HolographicPalettes.getFoilColors(rarity) }
 
-    this.drawWithContent {
-        drawContent()
+    // Read device tilt for 2.5D parallax (only apply on high rarity for performance)
+    val tiltOffset = rememberDeviceTilt(sensitivity = 10f)
 
-        // 1. Prismatic Foil Color Shift Layer
-        val angleRad = Math.toRadians(rainbowShift.toDouble())
-        val startX = (size.width / 2) + (cos(angleRad) * size.width).toFloat()
-        val startY = (size.height / 2) + (sin(angleRad) * size.height).toFloat()
-        val endX = (size.width / 2) - (cos(angleRad) * size.width).toFloat()
-        val endY = (size.height / 2) - (sin(angleRad) * size.height).toFloat()
-
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = foilColors.map { it.copy(alpha = it.alpha * intensity) },
-                start = Offset(startX, startY),
-                end = Offset(endX, endY)
-            ),
-            blendMode = BlendMode.Screen
-        )
-
-        // 2. Specular Sweeping Diagonal Glint Beam
-        val glintWidth = size.width * 0.45f
-        val glintCenter = shimmerProgress * (size.width + glintWidth * 2) - glintWidth
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    Color.Transparent,
-                    Color.White.copy(alpha = 0.15f * intensity),
-                    Color.White.copy(alpha = 0.45f * intensity),
-                    Color.White.copy(alpha = 0.15f * intensity),
-                    Color.Transparent
-                ),
-                start = Offset(glintCenter - glintWidth / 2, 0f),
-                end = Offset(glintCenter + glintWidth / 2, size.height)
-            ),
-            blendMode = BlendMode.Plus
-        )
+    // Android 13+ AGSL Shader Integration
+    val isHighRarity = rarity == "MYTHIC" || rarity == "LEGENDARY"
+    
+    // Compile shader exactly ONCE to prevent severe lag/freezing
+    val shader = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && isHighRarity) {
+            try {
+                RuntimeShader(HOLOGRAPHIC_AGSL_SHADER)
+            } catch (e: Exception) {
+                null
+            }
+        } else null
     }
+
+    this
+        .graphicsLayer {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && shader != null) {
+                try {
+                    // Update uniforms on the existing compiled shader
+                    shader.setFloatUniform("time", rainbowShift / 360f * 10f)
+                    shader.setFloatUniform("tiltOffset", tiltOffset.value.x, tiltOffset.value.y)
+                    shader.setFloatUniform("resolution", if (size.width > 0f) size.width else 1f, if (size.height > 0f) size.height else 1f)
+                    
+                    // In Compose 1.2.0+, android.graphics.RenderEffect.asComposeRenderEffect() extension is available
+                    this.renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "contents").asComposeRenderEffect()
+                } catch (e: Exception) {
+                    // Silent fallback if shader fails
+                }
+            }
+        }
+        .drawWithContent {
+            drawContent()
+
+            // Graceful fallback and supplementary base effect
+            // 1. Prismatic Foil Color Shift Layer
+            val angleRad = Math.toRadians(rainbowShift.toDouble())
+            val startX = (size.width / 2) + (cos(angleRad) * size.width).toFloat()
+            val startY = (size.height / 2) + (sin(angleRad) * size.height).toFloat()
+            val endX = (size.width / 2) - (cos(angleRad) * size.width).toFloat()
+            val endY = (size.height / 2) - (sin(angleRad) * size.height).toFloat()
+
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = foilColors.map { it.copy(alpha = it.alpha * intensity) },
+                    start = Offset(startX, startY),
+                    end = Offset(endX, endY)
+                ),
+                blendMode = BlendMode.Screen
+            )
+
+            // 2. Specular Sweeping Diagonal Glint Beam
+            val glintWidth = size.width * 0.45f
+            val glintCenter = shimmerProgress * (size.width + glintWidth * 2) - glintWidth
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.White.copy(alpha = 0.15f * intensity),
+                        Color.White.copy(alpha = 0.45f * intensity),
+                        Color.White.copy(alpha = 0.15f * intensity),
+                        Color.Transparent
+                    ),
+                    start = Offset(glintCenter - glintWidth / 2, 0f),
+                    end = Offset(glintCenter + glintWidth / 2, size.height)
+                ),
+                blendMode = BlendMode.Plus
+            )
+        }
 }
 
 /**
@@ -244,6 +324,9 @@ fun HolographicFloatingPiece(
 
     val charInfo = remember(symbolChar) { CharacterIdentity.fromIdOrSymbol(symbolChar) }
     val glowColor = HolographicPalettes.getGlowColor(rarity)
+    
+    // Read device tilt for 2.5D Parallax on the character itself
+    val tiltOffset = rememberDeviceTilt(sensitivity = 12f)
 
     Box(
         modifier = modifier
@@ -267,25 +350,34 @@ fun HolographicFloatingPiece(
             )
         }
 
-        // Glowing Backing Aura
-        Text(
-            text = charInfo.characterEmoji,
-            fontSize = fontSize,
-            modifier = Modifier
-                .offset(x = 1.dp, y = 1.dp)
-                .shadow(
-                    elevation = 8.dp,
-                    shape = CircleShape,
-                    ambientColor = charInfo.weaponGlowColor,
-                    spotColor = glowColor
-                )
-        )
+        // Apply Parallax translation to the actual character graphics
+        Box(
+            modifier = Modifier.graphicsLayer {
+                translationX = tiltOffset.value.x
+                translationY = tiltOffset.value.y
+            },
+            contentAlignment = Alignment.Center
+        ) {
+            // Glowing Backing Aura
+            Text(
+                text = charInfo.characterEmoji,
+                fontSize = fontSize,
+                modifier = Modifier
+                    .offset(x = 1.dp, y = 1.dp)
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = CircleShape,
+                        ambientColor = charInfo.weaponGlowColor,
+                        spotColor = glowColor
+                    )
+            )
 
-        // Main Vivid Living Character Avatar
-        Text(
-            text = charInfo.characterEmoji,
-            fontSize = fontSize
-        )
+            // Main Vivid Living Character Avatar
+            Text(
+                text = charInfo.characterEmoji,
+                fontSize = fontSize
+            )
+        }
     }
 }
 
