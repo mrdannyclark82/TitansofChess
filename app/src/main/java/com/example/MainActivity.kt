@@ -83,7 +83,7 @@ fun MainAppScreen(
             battleViewModel = battleViewModel,
             opponentName = matchedOpponent?.name ?: "ShadowMaster99",
             onExitBattle = {
-                // Return to home
+                battleViewModel.dismissGameOver()
             }
         )
     } else {

@@ -21,7 +21,10 @@ data class BoardCell(
 data class TowersState(
     val kingTowerHp: Int = 3500,
     val leftTowerHp: Int = 2000,
-    val rightTowerHp: Int = 2000
+    val rightTowerHp: Int = 2000,
+    val isLeftHit: Boolean = false,
+    val isRightHit: Boolean = false,
+    val isKingHit: Boolean = false
 )
 
 data class BattleRuntimeState(
@@ -128,6 +131,8 @@ class BattleViewModel : ViewModel() {
         startBattleLoop()
     }
 
+    private var enemyElixir = 5f
+
     private fun startBattleLoop() {
         matchLoopJob?.cancel()
         matchLoopJob = viewModelScope.launch {
@@ -137,6 +142,9 @@ class BattleViewModel : ViewModel() {
                 // Regenerate Elixir (up to 10)
                 if (_currentElixir.value < 10f) {
                     _currentElixir.value = (_currentElixir.value + 0.35f).coerceAtMost(10f)
+                }
+                if (enemyElixir < 10f) {
+                    enemyElixir = (enemyElixir + 0.38f).coerceAtMost(10f)
                 }
 
                 // Charge hero energy
@@ -154,13 +162,58 @@ class BattleViewModel : ViewModel() {
                     endBattle(isVictory = playerTotalHp >= enemyTotalHp)
                 }
 
-                // AI Opponent attacks tower periodically
-                if ((1..5).random() == 1) {
-                    val dmg = (80..150).random()
-                    _playerTowers.value = _playerTowers.value.copy(
-                        leftTowerHp = (_playerTowers.value.leftTowerHp - dmg).coerceAtLeast(0)
-                    )
+                // AI Tactical Decision: Summon counter-pieces or attack
+                if (enemyElixir >= 4f && (1..4).random() == 1) {
+                    performAiTacticalMove()
                 }
+
+                // Reset hit states
+                if (_playerTowers.value.isLeftHit || _playerTowers.value.isRightHit || _playerTowers.value.isKingHit) {
+                    _playerTowers.value = _playerTowers.value.copy(isLeftHit = false, isRightHit = false, isKingHit = false)
+                }
+                if (_enemyTowers.value.isLeftHit || _enemyTowers.value.isRightHit || _enemyTowers.value.isKingHit) {
+                    _enemyTowers.value = _enemyTowers.value.copy(isLeftHit = false, isRightHit = false, isKingHit = false)
+                }
+            }
+        }
+    }
+
+    private fun performAiTacticalMove() {
+        val aiCards = listOf("card_knight_paladin", "card_siege_rook", "card_hierophant", "card_pawn_sentinels")
+        val randomCardId = aiCards.random()
+        val card = GameCatalog.getCard(randomCardId)
+
+        if (enemyElixir >= card.elixirCost) {
+            enemyElixir -= card.elixirCost
+
+            // AI places pieces on rows 0-3
+            val targetRow = (0..2).random()
+            val targetCol = (0..7).random()
+
+            val currentCells = _boardGrid.value.toMutableList()
+            val idx = currentCells.indexOfFirst { it.row == targetRow && it.col == targetCol }
+            if (idx != -1) {
+                currentCells[idx] = BoardCell(
+                    row = targetRow,
+                    col = targetCol,
+                    pieceSymbol = card.symbolChar,
+                    pieceId = card.id,
+                    isPlayerPiece = false
+                )
+                _boardGrid.value = currentCells
+            }
+
+            // Damage player tower
+            val dmg = card.attack / 2
+            val currentPlayer = _playerTowers.value
+            _playerTowers.value = if (currentPlayer.leftTowerHp > 0) {
+                currentPlayer.copy(leftTowerHp = (currentPlayer.leftTowerHp - dmg).coerceAtLeast(0), isLeftHit = true)
+            } else {
+                currentPlayer.copy(kingTowerHp = (currentPlayer.kingTowerHp - dmg).coerceAtLeast(0), isKingHit = true)
+            }
+
+            if (_playerTowers.value.kingTowerHp <= 0) {
+                endBattle(isVictory = false)
             }
         }
     }
@@ -194,13 +247,16 @@ class BattleViewModel : ViewModel() {
                     _boardGrid.value = currentCells
                 }
 
+                // Calculate Synergy Bonus
+                val synergyBonus = calculateSynergyBonus(row, col, card.id)
+                val totalDmg = (card.attack / 2) + synergyBonus
+
                 // Damage enemy tower on successful tactical summon
-                val dmg = card.attack / 2
                 val currentEnemy = _enemyTowers.value
                 val newEnemy = if (currentEnemy.leftTowerHp > 0) {
-                    currentEnemy.copy(leftTowerHp = (currentEnemy.leftTowerHp - dmg).coerceAtLeast(0))
+                    currentEnemy.copy(leftTowerHp = (currentEnemy.leftTowerHp - totalDmg).coerceAtLeast(0), isLeftHit = true)
                 } else {
-                    currentEnemy.copy(kingTowerHp = (currentEnemy.kingTowerHp - dmg).coerceAtLeast(0))
+                    currentEnemy.copy(kingTowerHp = (currentEnemy.kingTowerHp - totalDmg).coerceAtLeast(0), isKingHit = true)
                 }
                 _enemyTowers.value = newEnemy
 
@@ -212,6 +268,30 @@ class BattleViewModel : ViewModel() {
                 _selectedHandCardId.value = null
             }
         }
+    }
+
+    private fun calculateSynergyBonus(row: Int, col: Int, cardId: String): Int {
+        var bonus = 0
+        val cells = _boardGrid.value
+
+        // Pawn Sentinel Synergy: Adjacent pawns increase damage
+        if (cardId == "card_pawn_sentinels") {
+            val adjacentPawns = cells.count { 
+                it.isPlayerPiece && it.pieceId == "card_pawn_sentinels" &&
+                Math.abs(it.row - row) <= 1 && Math.abs(it.col - col) <= 1 &&
+                !(it.row == row && it.col == col)
+            }
+            bonus += adjacentPawns * 40
+        }
+
+        // Royal Bond: Pieces near the King get a boost
+        val kingPos = cells.find { it.isPlayerPiece && it.pieceId == "player_king" }
+        if (kingPos != null) {
+            val dist = Math.abs(kingPos.row - row) + Math.abs(kingPos.col - col)
+            if (dist <= 2) bonus += 60
+        }
+
+        return bonus
     }
 
     fun triggerHeroAbility() {

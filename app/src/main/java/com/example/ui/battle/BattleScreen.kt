@@ -28,6 +28,7 @@ import com.example.data.model.GameCatalog
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.BattleViewModel
+import java.util.Locale
 import com.example.ui.viewmodel.BoardCell
 
 @Composable
@@ -99,7 +100,7 @@ fun BattleScreen(
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = String.format("%d:%02d", minutes, seconds),
+                    text = String.format(Locale.getDefault(), "%d:%02d", minutes, seconds),
                     fontWeight = FontWeight.Black,
                     fontSize = 12.sp,
                     color = if (matchTimerSeconds <= 30) ElegantCoral else ElegantPrimaryLavender
@@ -123,9 +124,9 @@ fun BattleScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            TowerStatusBadge(name = "Left Turret", hp = enemyTowers.leftTowerHp, maxHp = 1800, isEnemy = true)
-            TowerStatusBadge(name = "Enemy King", hp = enemyTowers.kingTowerHp, maxHp = 3200, isEnemy = true, isKing = true)
-            TowerStatusBadge(name = "Right Turret", hp = enemyTowers.rightTowerHp, maxHp = 1800, isEnemy = true)
+            TowerStatusBadge(name = "Left Turret", hp = enemyTowers.leftTowerHp, maxHp = 1800, isEnemy = true, isHit = enemyTowers.isLeftHit)
+            TowerStatusBadge(name = "Enemy King", hp = enemyTowers.kingTowerHp, maxHp = 3200, isEnemy = true, isKing = true, isHit = enemyTowers.isKingHit)
+            TowerStatusBadge(name = "Right Turret", hp = enemyTowers.rightTowerHp, maxHp = 1800, isEnemy = true, isHit = enemyTowers.isRightHit)
         }
 
         // 3. Tactical 8x8 Chess Royale Grid Arena
@@ -190,9 +191,9 @@ fun BattleScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            TowerStatusBadge(name = "Left Guard", hp = playerTowers.leftTowerHp, maxHp = 2000, isEnemy = false)
-            TowerStatusBadge(name = "Your King", hp = playerTowers.kingTowerHp, maxHp = 3500, isEnemy = false, isKing = true)
-            TowerStatusBadge(name = "Right Guard", hp = playerTowers.rightTowerHp, maxHp = 2000, isEnemy = false)
+            TowerStatusBadge(name = "Left Guard", hp = playerTowers.leftTowerHp, maxHp = 2000, isEnemy = false, isHit = playerTowers.isLeftHit)
+            TowerStatusBadge(name = "Your King", hp = playerTowers.kingTowerHp, maxHp = 3500, isEnemy = false, isKing = true, isHit = playerTowers.isKingHit)
+            TowerStatusBadge(name = "Right Guard", hp = playerTowers.rightTowerHp, maxHp = 2000, isEnemy = false, isHit = playerTowers.isRightHit)
         }
 
         // 5. Elixir Bar & Hero Super Ability
@@ -312,14 +313,25 @@ private fun TowerStatusBadge(
     hp: Int,
     maxHp: Int,
     isEnemy: Boolean,
-    isKing: Boolean = false
+    isKing: Boolean = false,
+    isHit: Boolean = false
 ) {
+    val shakeOffset by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isHit) 4.dp else 0.dp,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessHigh
+        ),
+        label = "tower_shake"
+    )
+
     val hpFrac = (hp.toFloat() / maxHp.toFloat()).coerceIn(0f, 1f)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .offset(x = shakeOffset)
             .clip(RoundedCornerShape(10.dp))
-            .background(ElegantCardBg)
+            .background(if (isHit) ElegantCoral.copy(alpha = 0.3f) else ElegantCardBg)
             .border(1.dp, if (isKing) ElegantPrimaryLavender.copy(alpha = 0.5f) else ElegantBorder, RoundedCornerShape(10.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
