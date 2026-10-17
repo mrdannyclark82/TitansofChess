@@ -32,12 +32,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Animation states for arena chess pieces (Idle, Spawn drop-in, Attack lunge, and Capture burst).
+ * Animation states for arena chess pieces.
  */
 enum class PieceAnimState {
     IDLE,
@@ -47,7 +46,7 @@ enum class PieceAnimState {
 }
 
 /**
- * Represents a piece placed on the 8x8 Clash Royale Chess Arena.
+ * Piece on the 8x8 arena. Level drives upgrade stars and visual polish.
  */
 data class ArenaPiece(
     val id: String,
@@ -56,32 +55,25 @@ data class ArenaPiece(
     val row: Int,
     val col: Int,
     val hp: Float = 1f,
+    val level: Int = 1,
     val animState: PieceAnimState = PieceAnimState.IDLE
 )
 
-/**
- * Represents a transient particle effect triggered on a specific board square.
- */
 data class SquareEffect(
     val id: Long,
     val row: Int,
     val col: Int,
-    val isCapture: Boolean, // true = Crown/Fire explosion, false = Elixir Spawn shockwave
+    val isCapture: Boolean,
     val team: PieceTeam
 )
 
-/**
- * Core enums for Clash Royale style Chess Pieces.
- * If you already have these in com.example.data.model.Models, you can remove these
- * and import your existing models directly.
- */
 enum class ChessPieceType(val displayName: String, val defaultElixir: Int) {
-    PAWN("Royal Recruit Pawn", 1),
-    KNIGHT("Hog Prince Knight", 3),
-    BISHOP("Grand Wizard Bishop", 3),
-    ROOK("Mega Cannon Tower", 5),
+    PAWN("Royal Recruit", 1),
+    KNIGHT("Hog Prince", 3),
+    BISHOP("Grand Wizard", 3),
+    ROOK("Mega Cannon", 5),
     QUEEN("Archer Queen", 9),
-    KING("Blue King", 10)
+    KING("King", 10)
 }
 
 enum class PieceTeam(val primary: Color, val secondary: Color, val highlight: Color) {
@@ -132,9 +124,6 @@ enum class CardRarity(
     )
 }
 
-/**
- * Full Clash Royale style Deck Card featuring the Chess Piece, Elixir Drop, Level Banner, and Rarity Border.
- */
 @Composable
 fun ClashChessCard(
     pieceType: ChessPieceType,
@@ -169,7 +158,6 @@ fun ClashChessCard(
                 } else Modifier
             )
     ) {
-        // Card Frame
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -194,7 +182,6 @@ fun ClashChessCard(
                     shape = RoundedCornerShape(12.dp)
                 )
         ) {
-            // Subtle sunburst/arena glow inside card
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -208,10 +195,10 @@ fun ClashChessCard(
                 )
             }
 
-            // Animated Piece Visual
             CharacterVisualView(
                 pieceType = pieceType,
                 team = team,
+                level = level,
                 isAnimated = canAfford,
                 size = 68.dp,
                 modifier = Modifier
@@ -219,7 +206,6 @@ fun ClashChessCard(
                     .padding(top = 6.dp)
             )
 
-            // Bottom Level Banner
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -237,7 +223,6 @@ fun ClashChessCard(
             }
         }
 
-        // Top-Left Elixir Drop Badge
         ElixirBadge(
             cost = elixirCost,
             modifier = Modifier
@@ -247,9 +232,6 @@ fun ClashChessCard(
     }
 }
 
-/**
- * Purple Elixir Drop icon used in Clash Royale cards.
- */
 @Composable
 fun ElixirBadge(cost: Int, modifier: Modifier = Modifier) {
     Box(
@@ -265,20 +247,13 @@ fun ElixirBadge(cost: Int, modifier: Modifier = Modifier) {
                 cubicTo(w * 0.05f, h * 0.85f, w * 0.1f, h * 0.45f, w * 0.5f, h * 0.05f)
                 close()
             }
-            // Drop shadow/outline
-            drawPath(
-                path = dropPath,
-                color = Color(0xFF4A0072),
-                style = Stroke(width = 5f)
-            )
-            // Main Elixir Fill
+            drawPath(path = dropPath, color = Color(0xFF4A0072), style = Stroke(width = 5f))
             drawPath(
                 path = dropPath,
                 brush = Brush.verticalGradient(
                     listOf(Color(0xFFEA80FC), Color(0xFFAA00FF), Color(0xFF6A1B9A))
                 )
             )
-            // Glossy specular highlight
             drawCircle(
                 color = Color.White.copy(alpha = 0.6f),
                 radius = w * 0.1f,
@@ -296,14 +271,14 @@ fun ElixirBadge(cost: Int, modifier: Modifier = Modifier) {
 }
 
 /**
- * Standalone Board/Arena Piece Renderer.
- * Renders chunky, stylized Clash Royale characters mapped to each Chess Piece role,
- * complete with Spawn drop-in bounce, Attack lunge, and HP bar support.
+ * Clash Royale style piece renderer.
+ * level (1-14) controls upgrade stars and slight visual polish.
  */
 @Composable
 fun CharacterVisualView(
     pieceType: ChessPieceType,
     team: PieceTeam = PieceTeam.BLUE,
+    level: Int = 1,
     isAnimated: Boolean = true,
     animState: PieceAnimState = PieceAnimState.IDLE,
     showHpBar: Boolean = false,
@@ -314,24 +289,23 @@ fun CharacterVisualView(
     val infiniteTransition = rememberInfiniteTransition(label = "clash_piece_idle")
     val bounceOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = if (isAnimated) -4f else 0f,
+        targetValue = if (isAnimated) -3.5f else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(850, easing = FastOutSlowInEasing),
+            animation = tween(900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "bounce"
     )
     val breathScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isAnimated) 1.04f else 1f,
+        targetValue = if (isAnimated) 1.035f else 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(850, easing = FastOutSlowInEasing),
+            animation = tween(900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "breath"
     )
 
-    // Spawn drop-in animation (sky drop + squash & stretch)
     val spawnProgress = remember(animState) { Animatable(if (animState == PieceAnimState.SPAWNING) 0f else 1f) }
     LaunchedEffect(animState) {
         if (animState == PieceAnimState.SPAWNING) {
@@ -346,10 +320,10 @@ fun CharacterVisualView(
         }
     }
 
-    val dropOffsetY = (1f - spawnProgress.value) * -65f
+    val dropOffsetY = (1f - spawnProgress.value) * -70f
     val dynamicScale = when (animState) {
-        PieceAnimState.SPAWNING -> 0.5f + 0.5f * spawnProgress.value
-        PieceAnimState.ATTACKING -> 1.18f
+        PieceAnimState.SPAWNING -> 0.45f + 0.55f * spawnProgress.value
+        PieceAnimState.ATTACKING -> 1.15f
         else -> breathScale
     }
 
@@ -357,38 +331,33 @@ fun CharacterVisualView(
         val w = this.size.width
         val h = this.size.height
 
-        // 1. Arena Ground Shadow (shrinks when piece is high in the air during spawn)
-        val shadowScale = spawnProgress.value.coerceIn(0.3f, 1f)
+        val shadowScale = spawnProgress.value.coerceIn(0.35f, 1f)
         drawOval(
-            color = Color.Black.copy(alpha = 0.42f * shadowScale),
-            topLeft = Offset(w * (0.5f - 0.35f * shadowScale), h * 0.80f),
-            size = Size(w * 0.7f * shadowScale, h * 0.16f * shadowScale)
+            color = Color.Black.copy(alpha = 0.38f * shadowScale),
+            topLeft = Offset(w * (0.5f - 0.32f * shadowScale), h * 0.82f),
+            size = Size(w * 0.64f * shadowScale, h * 0.14f * shadowScale)
         )
 
         translate(top = bounceOffset + dropOffsetY) {
-            scale(scaleX = dynamicScale, scaleY = dynamicScale, pivot = Offset(w / 2f, h * 0.8f)) {
-                // 2. Chunky Pedestal Base (Gold Rim + Team Tunic Base)
+            scale(scaleX = dynamicScale, scaleY = dynamicScale, pivot = Offset(w / 2f, h * 0.78f)) {
                 drawPedestalBase(team)
-
-                // 3. Piece-Specific Clash Royale Character Silhouette & Details
                 when (pieceType) {
-                    ChessPieceType.PAWN -> drawRecruitPawn(team)
-                    ChessPieceType.KNIGHT -> drawPrinceKnight(team)
-                    ChessPieceType.BISHOP -> drawWizardBishop(team)
-                    ChessPieceType.ROOK -> drawCannonRook(team)
-                    ChessPieceType.QUEEN -> drawArcherQueen(team)
-                    ChessPieceType.KING -> drawClashKing(team)
+                    ChessPieceType.PAWN -> drawRoyalRecruit(team, level)
+                    ChessPieceType.KNIGHT -> drawHogPrince(team, level)
+                    ChessPieceType.BISHOP -> drawGrandWizard(team, level)
+                    ChessPieceType.ROOK -> drawMegaCannon(team, level)
+                    ChessPieceType.QUEEN -> drawArcherQueen(team, level)
+                    ChessPieceType.KING -> drawClashKing(team, level)
                 }
+                drawUpgradeStars(level, w, h)
             }
         }
 
-        // 4. Optional Clash Royale Floating HP Bar above piece
-        if (showHpBar && spawnProgress.value > 0.8f) {
-            val barWidth = w * 0.68f
-            val barHeight = h * 0.09f
+        if (showHpBar && spawnProgress.value > 0.85f) {
+            val barWidth = w * 0.7f
+            val barHeight = h * 0.08f
             val barLeft = (w - barWidth) / 2f
-            val barTop = h * 0.02f
-
+            val barTop = h * 0.01f
             drawRoundRect(
                 color = Color(0xDD111722),
                 topLeft = Offset(barLeft, barTop),
@@ -405,9 +374,403 @@ fun CharacterVisualView(
     }
 }
 
-/**
- * Renders Clash Royale style Spawn Elixir Shockwaves & Capture Explosion Particles on a board tile.
- */
+private fun DrawScope.drawUpgradeStars(level: Int, w: Float, h: Float) {
+    val starCount = when {
+        level >= 11 -> 3
+        level >= 7 -> 2
+        level >= 4 -> 1
+        else -> 0
+    }
+    if (starCount == 0) return
+    val starColor = Color(0xFFFFD54F)
+    val outline = Color(0xFF1A1A1A)
+    val startX = w * 0.5f - (starCount - 1) * w * 0.08f
+    for (i in 0 until starCount) {
+        val cx = startX + i * w * 0.16f
+        val cy = h * 0.08f
+        drawCircle(color = outline, radius = w * 0.045f, center = Offset(cx, cy))
+        drawCircle(color = starColor, radius = w * 0.032f, center = Offset(cx, cy))
+    }
+}
+
+private fun DrawScope.drawPedestalBase(team: PieceTeam) {
+    val w = size.width
+    val h = size.height
+    val outline = Color(0xFF1A1A1A)
+
+    drawRoundRect(
+        brush = Brush.horizontalGradient(listOf(Color(0xFFFFB300), Color(0xFFFFEE58), Color(0xFFF57F17))),
+        topLeft = Offset(w * 0.18f, h * 0.74f),
+        size = Size(w * 0.64f, h * 0.11f),
+        cornerRadius = CornerRadius(10f, 10f)
+    )
+    drawRoundRect(
+        color = outline,
+        topLeft = Offset(w * 0.18f, h * 0.74f),
+        size = Size(w * 0.64f, h * 0.11f),
+        cornerRadius = CornerRadius(10f, 10f),
+        style = Stroke(width = 3.5f)
+    )
+
+    drawRoundRect(
+        brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary)),
+        topLeft = Offset(w * 0.24f, h * 0.66f),
+        size = Size(w * 0.52f, h * 0.1f),
+        cornerRadius = CornerRadius(8f, 8f)
+    )
+    drawRoundRect(
+        color = outline,
+        topLeft = Offset(w * 0.24f, h * 0.66f),
+        size = Size(w * 0.52f, h * 0.1f),
+        cornerRadius = CornerRadius(8f, 8f),
+        style = Stroke(width = 3.5f)
+    )
+}
+
+/** Royal Recruit – helmet, shield, short sword. */
+private fun DrawScope.drawRoyalRecruit(team: PieceTeam, level: Int) {
+    val w = size.width
+    val h = size.height
+    val outline = Color(0xFF1A1A1A)
+    val metal = if (level >= 7) Color(0xFFCFD8DC) else Color(0xFFB0BEC5)
+
+    // Body
+    drawRoundRect(
+        brush = Brush.verticalGradient(listOf(team.highlight, team.primary)),
+        topLeft = Offset(w * 0.34f, h * 0.42f),
+        size = Size(w * 0.32f, h * 0.26f),
+        cornerRadius = CornerRadius(12f, 12f)
+    )
+    drawRoundRect(
+        color = outline,
+        topLeft = Offset(w * 0.34f, h * 0.42f),
+        size = Size(w * 0.32f, h * 0.26f),
+        cornerRadius = CornerRadius(12f, 12f),
+        style = Stroke(width = 4f)
+    )
+
+    // Helmet
+    drawCircle(
+        brush = Brush.radialGradient(listOf(metal, Color(0xFF78909C)), center = Offset(w * 0.46f, h * 0.28f)),
+        radius = w * 0.16f,
+        center = Offset(w * 0.5f, h * 0.32f)
+    )
+    drawCircle(color = outline, radius = w * 0.16f, center = Offset(w * 0.5f, h * 0.32f), style = Stroke(width = 4f))
+
+    // Visor
+    drawLine(
+        color = outline,
+        start = Offset(w * 0.38f, h * 0.32f),
+        end = Offset(w * 0.62f, h * 0.32f),
+        strokeWidth = 4.5f,
+        cap = StrokeCap.Round
+    )
+
+    // Plume
+    drawCircle(color = team.highlight, radius = w * 0.055f, center = Offset(w * 0.5f, h * 0.14f))
+    drawCircle(color = outline, radius = w * 0.055f, center = Offset(w * 0.5f, h * 0.14f), style = Stroke(width = 3f))
+
+    // Shield
+    drawCircle(color = Color(0xFF8D6E63), radius = w * 0.11f, center = Offset(w * 0.68f, h * 0.52f))
+    drawCircle(color = Color(0xFFFFCA28), radius = w * 0.11f, center = Offset(w * 0.68f, h * 0.52f), style = Stroke(width = 3.5f))
+
+    // Sword tip
+    if (level >= 4) {
+        drawRoundRect(
+            color = Color(0xFFECEFF1),
+            topLeft = Offset(w * 0.26f, h * 0.38f),
+            size = Size(w * 0.06f, h * 0.18f),
+            cornerRadius = CornerRadius(2f, 2f)
+        )
+        drawRoundRect(
+            color = outline,
+            topLeft = Offset(w * 0.26f, h * 0.38f),
+            size = Size(w * 0.06f, h * 0.18f),
+            cornerRadius = CornerRadius(2f, 2f),
+            style = Stroke(width = 2.5f)
+        )
+    }
+}
+
+/** Hog Prince – armored hog rider with lance. */
+private fun DrawScope.drawHogPrince(team: PieceTeam, level: Int) {
+    val w = size.width
+    val h = size.height
+    val outline = Color(0xFF1A1A1A)
+
+    val body = Path().apply {
+        moveTo(w * 0.28f, h * 0.68f)
+        quadraticBezierTo(w * 0.22f, h * 0.45f, w * 0.38f, h * 0.28f)
+        lineTo(w * 0.62f, h * 0.26f)
+        quadraticBezierTo(w * 0.78f, h * 0.38f, w * 0.72f, h * 0.68f)
+        close()
+    }
+    drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFFFFF176), Color(0xFFFFB300))))
+    drawPath(body, color = outline, style = Stroke(width = 4f))
+
+    // Mane
+    val mane = Path().apply {
+        moveTo(w * 0.32f, h * 0.5f)
+        quadraticBezierTo(w * 0.12f, h * 0.32f, w * 0.42f, h * 0.12f)
+        lineTo(w * 0.48f, h * 0.22f)
+        close()
+    }
+    drawPath(mane, color = team.primary)
+    drawPath(mane, color = outline, style = Stroke(width = 3.5f))
+
+    // Eye
+    drawCircle(color = team.highlight, radius = w * 0.03f, center = Offset(w * 0.52f, h * 0.36f))
+
+    // Lance
+    if (level >= 4) {
+        val lance = Path().apply {
+            moveTo(w * 0.74f, h * 0.66f)
+            lineTo(w * 0.8f, h * 0.1f)
+            lineTo(w * 0.86f, h * 0.66f)
+            close()
+        }
+        drawPath(lance, brush = Brush.horizontalGradient(listOf(Color(0xFFECEFF1), Color(0xFF90A4AE))))
+        drawPath(lance, color = outline, style = Stroke(width = 3f))
+    }
+}
+
+/** Grand Wizard – pointed hat, glowing eyes, orb. */
+private fun DrawScope.drawGrandWizard(team: PieceTeam, level: Int) {
+    val w = size.width
+    val h = size.height
+    val outline = Color(0xFF1A1A1A)
+
+    val cloak = Path().apply {
+        moveTo(w * 0.26f, h * 0.68f)
+        quadraticBezierTo(w * 0.2f, h * 0.35f, w * 0.5f, h * 0.1f)
+        quadraticBezierTo(w * 0.8f, h * 0.35f, w * 0.74f, h * 0.68f)
+        close()
+    }
+    drawPath(cloak, brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary)))
+    drawPath(cloak, color = outline, style = Stroke(width = 4f))
+
+    // Face shadow
+    drawCircle(color = Color(0xFF121824), radius = w * 0.1f, center = Offset(w * 0.5f, h * 0.36f))
+    drawCircle(color = Color(0xFF00E5FF), radius = w * 0.025f, center = Offset(w * 0.45f, h * 0.35f))
+    drawCircle(color = Color(0xFF00E5FF), radius = w * 0.025f, center = Offset(w * 0.55f, h * 0.35f))
+
+    // Orb
+    val orbColor = if (level >= 7) Color(0xFFFF4081) else Color(0xFFEA80FC)
+    drawCircle(
+        brush = Brush.radialGradient(listOf(Color.White, orbColor, Color(0xFFAA00FF))),
+        radius = w * 0.06f,
+        center = Offset(w * 0.5f, h * 0.1f)
+    )
+    drawCircle(color = outline, radius = w * 0.06f, center = Offset(w * 0.5f, h * 0.1f), style = Stroke(width = 3f))
+}
+
+/** Mega Cannon – stone tower with banner and cannon barrel. */
+private fun DrawScope.drawMegaCannon(team: PieceTeam, level: Int) {
+    val w = size.width
+    val h = size.height
+    val outline = Color(0xFF1A1A1A)
+
+    drawRoundRect(
+        brush = Brush.horizontalGradient(listOf(Color(0xFFB0BEC5), Color(0xFFCFD8DC), Color(0xFF78909C))),
+        topLeft = Offset(w * 0.28f, h * 0.26f),
+        size = Size(w * 0.44f, h * 0.42f),
+        cornerRadius = CornerRadius(6f, 6f)
+    )
+    drawRoundRect(
+        color = outline,
+        topLeft = Offset(w * 0.28f, h * 0.26f),
+        size = Size(w * 0.44f, h * 0.42f),
+        cornerRadius = CornerRadius(6f, 6f),
+        style = Stroke(width = 4f)
+    )
+
+    // Battlements
+    listOf(w * 0.22f, w * 0.42f, w * 0.62f).forEach { x ->
+        drawRoundRect(
+            color = Color(0xFFCFD8DC),
+            topLeft = Offset(x, h * 0.14f),
+            size = Size(w * 0.14f, h * 0.14f),
+            cornerRadius = CornerRadius(3f, 3f)
+        )
+        drawRoundRect(
+            color = outline,
+            topLeft = Offset(x, h * 0.14f),
+            size = Size(w * 0.14f, h * 0.14f),
+            cornerRadius = CornerRadius(3f, 3f),
+            style = Stroke(width = 3.5f)
+        )
+    }
+
+    // Banner
+    val banner = Path().apply {
+        moveTo(w * 0.4f, h * 0.32f)
+        lineTo(w * 0.6f, h * 0.32f)
+        lineTo(w * 0.6f, h * 0.52f)
+        lineTo(w * 0.5f, h * 0.46f)
+        lineTo(w * 0.4f, h * 0.52f)
+        close()
+    }
+    drawPath(banner, color = team.primary)
+    drawPath(banner, color = Color(0xFFFFD54F), style = Stroke(width = 2.5f))
+
+    // Cannon barrel (higher level)
+    if (level >= 7) {
+        drawRoundRect(
+            color = Color(0xFF455A64),
+            topLeft = Offset(w * 0.62f, h * 0.4f),
+            size = Size(w * 0.2f, h * 0.1f),
+            cornerRadius = CornerRadius(4f, 4f)
+        )
+        drawRoundRect(
+            color = outline,
+            topLeft = Offset(w * 0.62f, h * 0.4f),
+            size = Size(w * 0.2f, h * 0.1f),
+            cornerRadius = CornerRadius(4f, 4f),
+            style = Stroke(width = 2.5f)
+        )
+    }
+}
+
+/** Archer Queen – crown, bow, flowing gown. */
+private fun DrawScope.drawArcherQueen(team: PieceTeam, level: Int) {
+    val w = size.width
+    val h = size.height
+    val outline = Color(0xFF1A1A1A)
+
+    val gown = Path().apply {
+        moveTo(w * 0.26f, h * 0.68f)
+        cubicTo(w * 0.3f, h * 0.48f, w * 0.34f, h * 0.34f, w * 0.34f, h * 0.3f)
+        lineTo(w * 0.66f, h * 0.3f)
+        cubicTo(w * 0.66f, h * 0.34f, w * 0.7f, h * 0.48f, w * 0.74f, h * 0.68f)
+        close()
+    }
+    drawPath(gown, brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary)))
+    drawPath(gown, color = outline, style = Stroke(width = 4f))
+
+    // Crown
+    val crown = Path().apply {
+        moveTo(w * 0.28f, h * 0.3f)
+        lineTo(w * 0.22f, h * 0.14f)
+        lineTo(w * 0.4f, h * 0.22f)
+        lineTo(w * 0.5f, h * 0.08f)
+        lineTo(w * 0.6f, h * 0.22f)
+        lineTo(w * 0.78f, h * 0.14f)
+        lineTo(w * 0.72f, h * 0.3f)
+        close()
+    }
+    drawPath(crown, brush = Brush.linearGradient(listOf(Color(0xFFFFF59D), Color(0xFFFFCA28))))
+    drawPath(crown, color = outline, style = Stroke(width = 3.5f))
+
+    // Pearls
+    listOf(Offset(w * 0.22f, h * 0.13f), Offset(w * 0.5f, h * 0.07f), Offset(w * 0.78f, h * 0.13f)).forEach { c ->
+        drawCircle(color = Color.White, radius = w * 0.03f, center = c)
+        drawCircle(color = outline, radius = w * 0.03f, center = c, style = Stroke(width = 2f))
+    }
+
+    // Bow (higher level)
+    if (level >= 4) {
+        drawArc(
+            color = Color(0xFF8D6E63),
+            startAngle = 200f,
+            sweepAngle = 140f,
+            useCenter = false,
+            topLeft = Offset(w * 0.62f, h * 0.32f),
+            size = Size(w * 0.22f, h * 0.28f),
+            style = Stroke(width = 4f, cap = StrokeCap.Round)
+        )
+    }
+
+    // Gem
+    val gem = Path().apply {
+        moveTo(w * 0.5f, h * 0.4f)
+        lineTo(w * 0.56f, h * 0.48f)
+        lineTo(w * 0.5f, h * 0.56f)
+        lineTo(w * 0.44f, h * 0.48f)
+        close()
+    }
+    drawPath(gem, color = if (level >= 11) Color(0xFF00E676) else Color(0xFF69F0AE))
+    drawPath(gem, color = outline, style = Stroke(width = 2f))
+}
+
+/** Classic Clash King – mustache, big crown, ruby. */
+private fun DrawScope.drawClashKing(team: PieceTeam, level: Int) {
+    val w = size.width
+    val h = size.height
+    val outline = Color(0xFF1A1A1A)
+
+    drawRoundRect(
+        brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary)),
+        topLeft = Offset(w * 0.24f, h * 0.34f),
+        size = Size(w * 0.52f, h * 0.34f),
+        cornerRadius = CornerRadius(16f, 16f)
+    )
+    drawRoundRect(
+        color = outline,
+        topLeft = Offset(w * 0.24f, h * 0.34f),
+        size = Size(w * 0.52f, h * 0.34f),
+        cornerRadius = CornerRadius(16f, 16f),
+        style = Stroke(width = 4f)
+    )
+
+    // Mustache / beard
+    val beard = Path().apply {
+        moveTo(w * 0.32f, h * 0.44f)
+        quadraticBezierTo(w * 0.5f, h * 0.38f, w * 0.68f, h * 0.44f)
+        quadraticBezierTo(w * 0.64f, h * 0.6f, w * 0.5f, h * 0.6f)
+        quadraticBezierTo(w * 0.36f, h * 0.6f, w * 0.32f, h * 0.44f)
+        close()
+    }
+    drawPath(beard, color = Color(0xFF263238))
+    drawPath(beard, color = outline, style = Stroke(width = 3f))
+
+    // Crown
+    val crown = Path().apply {
+        moveTo(w * 0.26f, h * 0.34f)
+        lineTo(w * 0.2f, h * 0.16f)
+        lineTo(w * 0.36f, h * 0.24f)
+        lineTo(w * 0.5f, h * 0.12f)
+        lineTo(w * 0.64f, h * 0.24f)
+        lineTo(w * 0.8f, h * 0.16f)
+        lineTo(w * 0.74f, h * 0.34f)
+        close()
+    }
+    drawPath(crown, brush = Brush.verticalGradient(listOf(Color(0xFFFFEE58), Color(0xFFFFB300))))
+    drawPath(crown, color = outline, style = Stroke(width = 4f))
+
+    // Cross
+    val cw = w * 0.05f
+    drawRoundRect(
+        color = Color(0xFFFFD54F),
+        topLeft = Offset(w * 0.5f - cw / 2f, h * 0.02f),
+        size = Size(cw, h * 0.14f),
+        cornerRadius = CornerRadius(3f, 3f)
+    )
+    drawRoundRect(
+        color = outline,
+        topLeft = Offset(w * 0.5f - cw / 2f, h * 0.02f),
+        size = Size(cw, h * 0.14f),
+        cornerRadius = CornerRadius(3f, 3f),
+        style = Stroke(width = 2.5f)
+    )
+    drawRoundRect(
+        color = Color(0xFFFFD54F),
+        topLeft = Offset(w * 0.4f, h * 0.06f),
+        size = Size(w * 0.2f, cw),
+        cornerRadius = CornerRadius(3f, 3f)
+    )
+    drawRoundRect(
+        color = outline,
+        topLeft = Offset(w * 0.4f, h * 0.06f),
+        size = Size(w * 0.2f, cw),
+        cornerRadius = CornerRadius(3f, 3f),
+        style = Stroke(width = 2.5f)
+    )
+
+    // Ruby
+    drawCircle(color = Color(0xFFFF1744), radius = w * 0.04f, center = Offset(w * 0.5f, h * 0.26f))
+    drawCircle(color = outline, radius = w * 0.04f, center = Offset(w * 0.5f, h * 0.26f), style = Stroke(width = 2f))
+}
+
 @Composable
 fun ArenaParticleEffectOverlay(
     isCapture: Boolean,
@@ -416,573 +779,45 @@ fun ArenaParticleEffectOverlay(
     modifier: Modifier = Modifier
 ) {
     val progress = remember { Animatable(0f) }
-
     LaunchedEffect(Unit) {
-        progress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = if (isCapture) 650 else 550,
-                easing = FastOutSlowInEasing
-            )
-        )
+        progress.animateTo(1f, tween(if (isCapture) 600 else 500, easing = FastOutSlowInEasing))
         onEffectComplete()
     }
-
     val p = progress.value
-    val fadeAlpha = (1f - p).coerceIn(0f, 1f)
+    val fade = (1f - p).coerceIn(0f, 1f)
 
     Canvas(modifier = modifier.fillMaxSize()) {
         val center = Offset(size.width / 2f, size.height / 2f)
-        val maxRadius = size.minDimension * 0.85f
-
+        val maxR = size.minDimension * 0.8f
         if (isCapture) {
-            // 1. Capture Shockwave Ring (Fiery Orange/Gold)
             drawCircle(
-                color = Color(0xFFFF9100).copy(alpha = fadeAlpha * 0.8f),
-                radius = maxRadius * (0.2f + p * 0.9f),
+                color = Color(0xFFFF9100).copy(alpha = fade * 0.8f),
+                radius = maxR * (0.2f + p * 0.85f),
                 center = center,
-                style = Stroke(width = 8f * fadeAlpha)
+                style = Stroke(width = 7f * fade)
             )
-
-            // 2. Inner Flash Core
             if (p < 0.4f) {
-                drawCircle(
-                    color = Color(0xFFFFF59D).copy(alpha = (1f - p * 2.5f)),
-                    radius = maxRadius * 0.45f,
-                    center = center
-                )
-            }
-
-            // 3. Radial Debris Sparks & Elixir Droplets (8 directions)
-            val angles = 8
-            for (i in 0 until angles) {
-                val angleRad = (i * (360f / angles)) * (PI.toFloat() / 180f)
-                val dist = maxRadius * (0.15f + p * 0.95f)
-                val px = center.x + cos(angleRad) * dist
-                val py = center.y + sin(angleRad) * dist
-
-                // Smoke puff
-                drawCircle(
-                    color = Color(0xFFCFD8DC).copy(alpha = fadeAlpha * 0.7f),
-                    radius = (size.minDimension * 0.14f) * (1f - p * 0.5f),
-                    center = Offset(px, py)
-                )
-
-                // Golden Star / Ember Spark
-                val sparkDist = dist * 1.15f
-                val sx = center.x + cos(angleRad + 0.25f) * sparkDist
-                val sy = center.y + sin(angleRad + 0.25f) * sparkDist
-                drawCircle(
-                    color = if (i % 2 == 0) Color(0xFFFFD54F).copy(alpha = fadeAlpha)
-                    else Color(0xFFEA80FC).copy(alpha = fadeAlpha),
-                    radius = (size.minDimension * 0.08f) * fadeAlpha,
-                    center = Offset(sx, sy)
-                )
+                drawCircle(color = Color(0xFFFFF59D).copy(alpha = 1f - p * 2.5f), radius = maxR * 0.4f, center = center)
             }
         } else {
-            // SPAWN EFFECT: Purple Elixir Ripple + Dust Clouds + Vertical Light Pillar
-            // 1. Expanding Elixir Ring
             drawCircle(
-                color = Color(0xFFEA80FC).copy(alpha = fadeAlpha * 0.85f),
-                radius = maxRadius * (0.15f + p * 0.75f),
+                color = Color(0xFFEA80FC).copy(alpha = fade * 0.85f),
+                radius = maxR * (0.15f + p * 0.7f),
                 center = center,
-                style = Stroke(width = 6f * fadeAlpha)
+                style = Stroke(width = 5f * fade)
             )
-
-            // 2. Secondary Team Color Ring
             drawCircle(
-                color = team.highlight.copy(alpha = fadeAlpha * 0.7f),
-                radius = maxRadius * (0.05f + p * 0.55f),
+                color = team.highlight.copy(alpha = fade * 0.65f),
+                radius = maxR * (0.05f + p * 0.5f),
                 center = center,
-                style = Stroke(width = 4f * fadeAlpha)
+                style = Stroke(width = 3.5f * fade)
             )
-
-            // 3. Dust Cloud Puffs around Pedestal
-            val puffCount = 6
-            for (i in 0 until puffCount) {
-                val angleRad = (i * (360f / puffCount)) * (PI.toFloat() / 180f)
-                val dist = maxRadius * (0.2f + p * 0.55f)
-                val px = center.x + cos(angleRad) * dist
-                val py = center.y + sin(angleRad) * dist * 0.7f + size.height * 0.15f
-
-                drawCircle(
-                    color = Color.White.copy(alpha = fadeAlpha * 0.65f),
-                    radius = size.minDimension * 0.12f * (0.5f + p * 0.5f),
-                    center = Offset(px, py)
-                )
-            }
         }
     }
 }
 
-private fun DrawScope.drawPedestalBase(team: PieceTeam) {
-    val w = size.width
-    val h = size.height
-    val outlineColor = Color(0xFF1A1A1A)
-
-    // Gold Lower Rim
-    drawRoundRect(
-        brush = Brush.horizontalGradient(
-            listOf(Color(0xFFFFB300), Color(0xFFFFEE58), Color(0xFFF57F17))
-        ),
-        topLeft = Offset(w * 0.2f, h * 0.72f),
-        size = Size(w * 0.6f, h * 0.12f),
-        cornerRadius = CornerRadius(12f, 12f)
-    )
-    drawRoundRect(
-        color = outlineColor,
-        topLeft = Offset(w * 0.2f, h * 0.72f),
-        size = Size(w * 0.6f, h * 0.12f),
-        cornerRadius = CornerRadius(12f, 12f),
-        style = Stroke(width = 4f)
-    )
-
-    // Team Colored Sub-Base
-    drawRoundRect(
-        brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary)),
-        topLeft = Offset(w * 0.25f, h * 0.64f),
-        size = Size(w * 0.5f, h * 0.1f),
-        cornerRadius = CornerRadius(8f, 8f)
-    )
-    drawRoundRect(
-        color = outlineColor,
-        topLeft = Offset(w * 0.25f, h * 0.64f),
-        size = Size(w * 0.5f, h * 0.1f),
-        cornerRadius = CornerRadius(8f, 8f),
-        style = Stroke(width = 4f)
-    )
-}
-
-/**
- * PAWN: Royal Recruit / Barbarian style helmet with wooden shield and short sword.
- */
-private fun DrawScope.drawRecruitPawn(team: PieceTeam) {
-    val w = size.width
-    val h = size.height
-    val outline = Color(0xFF1A1A1A)
-
-    // Torso
-    drawRoundRect(
-        color = team.primary,
-        topLeft = Offset(w * 0.32f, h * 0.44f),
-        size = Size(w * 0.36f, h * 0.22f),
-        cornerRadius = CornerRadius(10f, 10f)
-    )
-    drawRoundRect(
-        color = outline,
-        topLeft = Offset(w * 0.32f, h * 0.44f),
-        size = Size(w * 0.36f, h * 0.22f),
-        cornerRadius = CornerRadius(10f, 10f),
-        style = Stroke(width = 4f)
-    )
-
-    // Iron Bucket Helmet / Head
-    drawCircle(
-        brush = Brush.radialGradient(
-            listOf(Color(0xFFCFD8DC), Color(0xFF78909C), Color(0xFF455A64)),
-            center = Offset(w * 0.45f, h * 0.3f)
-        ),
-        radius = w * 0.18f,
-        center = Offset(w * 0.5f, h * 0.34f)
-    )
-    drawCircle(
-        color = outline,
-        radius = w * 0.18f,
-        center = Offset(w * 0.5f, h * 0.34f),
-        style = Stroke(width = 4f)
-    )
-
-    // Helmet Visor Slit
-    drawLine(
-        color = outline,
-        start = Offset(w * 0.38f, h * 0.34f),
-        end = Offset(w * 0.62f, h * 0.34f),
-        strokeWidth = 5f,
-        cap = StrokeCap.Round
-    )
-
-    // Team Plume on top
-    drawCircle(
-        color = team.highlight,
-        radius = w * 0.06f,
-        center = Offset(w * 0.5f, h * 0.14f)
-    )
-    drawCircle(
-        color = outline,
-        radius = w * 0.06f,
-        center = Offset(w * 0.5f, h * 0.14f),
-        style = Stroke(width = 3f)
-    )
-
-    // Mini Wooden Shield on Front-Right
-    drawCircle(
-        color = Color(0xFF8D6E63),
-        radius = w * 0.12f,
-        center = Offset(w * 0.65f, h * 0.54f)
-    )
-    drawCircle(
-        color = Color(0xFFFFCA28),
-        radius = w * 0.12f,
-        center = Offset(w * 0.65f, h * 0.54f),
-        style = Stroke(width = 4f)
-    )
-}
-
-/**
- * KNIGHT: Golden Prince / Pony Crest with Lance and Plumed Mane.
- */
-private fun DrawScope.drawPrinceKnight(team: PieceTeam) {
-    val w = size.width
-    val h = size.height
-    val outline = Color(0xFF1A1A1A)
-
-    // Armored Horse/Knight Bust Path
-    val knightPath = Path().apply {
-        moveTo(w * 0.32f, h * 0.65f)
-        lineTo(w * 0.28f, h * 0.35f)
-        quadraticBezierTo(w * 0.30f, h * 0.15f, w * 0.52f, h * 0.16f)
-        // Snout / Visor
-        lineTo(w * 0.72f, h * 0.28f)
-        lineTo(w * 0.66f, h * 0.38f)
-        lineTo(w * 0.52f, h * 0.36f)
-        // Chest
-        quadraticBezierTo(w * 0.65f, h * 0.48f, w * 0.65f, h * 0.65f)
-        close()
-    }
-
-    // Team Mane behind neck
-    val manePath = Path().apply {
-        moveTo(w * 0.32f, h * 0.58f)
-        quadraticBezierTo(w * 0.16f, h * 0.35f, w * 0.38f, h * 0.14f)
-        lineTo(w * 0.44f, h * 0.22f)
-        close()
-    }
-    drawPath(manePath, color = team.primary)
-    drawPath(manePath, color = outline, style = Stroke(width = 4f))
-
-    // Golden Armor Fill
-    drawPath(
-        path = knightPath,
-        brush = Brush.linearGradient(
-            listOf(Color(0xFFFFF176), Color(0xFFFFB300), Color(0xFFF57F17))
-        )
-    )
-    drawPath(path = knightPath, color = outline, style = Stroke(width = 4f))
-
-    // Fierce Glowing Eye
-    drawCircle(
-        color = team.highlight,
-        radius = w * 0.035f,
-        center = Offset(w * 0.50f, h * 0.25f)
-    )
-
-    // Jousting Lance Tip on side
-    val lancePath = Path().apply {
-        moveTo(w * 0.72f, h * 0.64f)
-        lineTo(w * 0.78f, h * 0.12f)
-        lineTo(w * 0.84f, h * 0.64f)
-        close()
-    }
-    drawPath(
-        lancePath,
-        brush = Brush.horizontalGradient(listOf(Color(0xFFECEFF1), Color(0xFF90A4AE)))
-    )
-    drawPath(lancePath, color = outline, style = Stroke(width = 3.5f))
-}
-
-/**
- * BISHOP: Grand Wizard / Magic Archer Hood with Glowing Arcane Gem & Fireball Orb.
- */
-private fun DrawScope.drawWizardBishop(team: PieceTeam) {
-    val w = size.width
-    val h = size.height
-    val outline = Color(0xFF1A1A1A)
-
-    // Wizard Cloak & Pointed Mitre Hood
-    val cloakPath = Path().apply {
-        moveTo(w * 0.28f, h * 0.65f)
-        quadraticBezierTo(w * 0.24f, h * 0.32f, w * 0.5f, h * 0.12f)
-        quadraticBezierTo(w * 0.76f, h * 0.32f, w * 0.72f, h * 0.65f)
-        close()
-    }
-
-    drawPath(
-        path = cloakPath,
-        brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary))
-    )
-    drawPath(path = cloakPath, color = outline, style = Stroke(width = 4f))
-
-    // Golden Trim Collar
-    drawArc(
-        color = Color(0xFFFFD54F),
-        startAngle = 15f,
-        sweepAngle = 150f,
-        useCenter = false,
-        topLeft = Offset(w * 0.32f, h * 0.36f),
-        size = Size(w * 0.36f, h * 0.18f),
-        style = Stroke(width = 6f, cap = StrokeCap.Round)
-    )
-
-    // Shadowed Hood Face + Glowing Wizard Eyes
-    drawCircle(
-        color = Color(0xFF121824),
-        radius = w * 0.11f,
-        center = Offset(w * 0.5f, h * 0.35f)
-    )
-    drawCircle(
-        color = Color(0xFF00E5FF),
-        radius = w * 0.028f,
-        center = Offset(w * 0.45f, h * 0.34f)
-    )
-    drawCircle(
-        color = Color(0xFF00E5FF),
-        radius = w * 0.028f,
-        center = Offset(w * 0.55f, h * 0.34f)
-    )
-
-    // Arcane Elixir/Fire Orb atop the Mitre
-    drawCircle(
-        brush = Brush.radialGradient(
-            listOf(Color.White, Color(0xFFFF4081), Color(0xFFAA00FF))
-        ),
-        radius = w * 0.065f,
-        center = Offset(w * 0.5f, h * 0.11f)
-    )
-    drawCircle(
-        color = outline,
-        radius = w * 0.065f,
-        center = Offset(w * 0.5f, h * 0.11f),
-        style = Stroke(width = 3f)
-    )
-}
-
-/**
- * ROOK: Clash Royale King's Stone Battlement Tower with Team Banner.
- */
-private fun DrawScope.drawCannonRook(team: PieceTeam) {
-    val w = size.width
-    val h = size.height
-    val outline = Color(0xFF1A1A1A)
-
-    // Main Stone Tower Body
-    drawRoundRect(
-        brush = Brush.horizontalGradient(
-            listOf(Color(0xFFB0BEC5), Color(0xFFCFD8DC), Color(0xFF78909C))
-        ),
-        topLeft = Offset(w * 0.30f, h * 0.28f),
-        size = Size(w * 0.40f, h * 0.38f),
-        cornerRadius = CornerRadius(6f, 6f)
-    )
-    drawRoundRect(
-        color = outline,
-        topLeft = Offset(w * 0.30f, h * 0.28f),
-        size = Size(w * 0.40f, h * 0.38f),
-        cornerRadius = CornerRadius(6f, 6f),
-        style = Stroke(width = 4f)
-    )
-
-    // 3 Top Battlement Crenellations
-    val merlonWidth = w * 0.14f
-    val merlonPositions = listOf(w * 0.24f, w * 0.43f, w * 0.62f)
-    merlonPositions.forEach { xPos ->
-        drawRoundRect(
-            color = Color(0xFFCFD8DC),
-            topLeft = Offset(xPos, h * 0.16f),
-            size = Size(merlonWidth, h * 0.14f),
-            cornerRadius = CornerRadius(4f, 4f)
-        )
-        drawRoundRect(
-            color = outline,
-            topLeft = Offset(xPos, h * 0.16f),
-            size = Size(merlonWidth, h * 0.14f),
-            cornerRadius = CornerRadius(4f, 4f),
-            style = Stroke(width = 4f)
-        )
-    }
-
-    // Hanging Team Banner Flag in the Center
-    val bannerPath = Path().apply {
-        moveTo(w * 0.41f, h * 0.33f)
-        lineTo(w * 0.59f, h * 0.33f)
-        lineTo(w * 0.59f, h * 0.54f)
-        lineTo(w * 0.50f, h * 0.48f)
-        lineTo(w * 0.41f, h * 0.54f)
-        close()
-    }
-    drawPath(bannerPath, color = team.primary)
-    drawPath(bannerPath, color = Color(0xFFFFD54F), style = Stroke(width = 3f))
-}
-
-/**
- * QUEEN: Archer Queen Tiara, Flowing Cape, and Emerald/Ruby Crown Jewels.
- */
-private fun DrawScope.drawArcherQueen(team: PieceTeam) {
-    val w = size.width
-    val h = size.height
-    val outline = Color(0xFF1A1A1A)
-
-    // Regal Gown / Armor Bodice
-    val gownPath = Path().apply {
-        moveTo(w * 0.28f, h * 0.65f)
-        cubicTo(w * 0.32f, h * 0.45f, w * 0.36f, h * 0.32f, w * 0.35f, h * 0.28f)
-        lineTo(w * 0.65f, h * 0.28f)
-        cubicTo(w * 0.64f, h * 0.32f, w * 0.68f, h * 0.45f, w * 0.72f, h * 0.65f)
-        close()
-    }
-    drawPath(
-        path = gownPath,
-        brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary))
-    )
-    drawPath(path = gownPath, color = outline, style = Stroke(width = 4f))
-
-    // Multi-peaked Golden Queen Tiara
-    val crownPath = Path().apply {
-        moveTo(w * 0.30f, h * 0.30f)
-        lineTo(w * 0.24f, h * 0.14f)
-        lineTo(w * 0.40f, h * 0.23f)
-        lineTo(w * 0.50f, h * 0.10f)
-        lineTo(w * 0.60f, h * 0.23f)
-        lineTo(w * 0.76f, h * 0.14f)
-        lineTo(w * 0.70f, h * 0.30f)
-        close()
-    }
-    drawPath(
-        path = crownPath,
-        brush = Brush.linearGradient(
-            listOf(Color(0xFFFFF59D), Color(0xFFFFCA28), Color(0xFFFF8F00))
-        )
-    )
-    drawPath(path = crownPath, color = outline, style = Stroke(width = 4f))
-
-    // Crown Pearls
-    val pearlCenters = listOf(
-        Offset(w * 0.24f, h * 0.13f),
-        Offset(w * 0.50f, h * 0.09f),
-        Offset(w * 0.76f, h * 0.13f)
-    )
-    pearlCenters.forEach { center ->
-        drawCircle(color = Color.White, radius = w * 0.035f, center = center)
-        drawCircle(color = outline, radius = w * 0.035f, center = center, style = Stroke(width = 2.5f))
-    }
-
-    // Center Diamond Brooch
-    val gemPath = Path().apply {
-        moveTo(w * 0.50f, h * 0.38f)
-        lineTo(w * 0.56f, h * 0.46f)
-        lineTo(w * 0.50f, h * 0.54f)
-        lineTo(w * 0.44f, h * 0.46f)
-        close()
-    }
-    drawPath(gemPath, color = Color(0xFF00E676))
-    drawPath(gemPath, color = outline, style = Stroke(width = 2.5f))
-}
-
-/**
- * KING: Iconic Clash Royale King with bushy mustache, massive gold crown, Ruby gem, and Royal Cross.
- */
-private fun DrawScope.drawClashKing(team: PieceTeam) {
-    val w = size.width
-    val h = size.height
-    val outline = Color(0xFF1A1A1A)
-
-    // Royal Mantle Robe
-    drawRoundRect(
-        brush = Brush.verticalGradient(listOf(team.highlight, team.primary, team.secondary)),
-        topLeft = Offset(w * 0.26f, h * 0.34f),
-        size = Size(w * 0.48f, h * 0.32f),
-        cornerRadius = CornerRadius(14f, 14f)
-    )
-    drawRoundRect(
-        color = outline,
-        topLeft = Offset(w * 0.26f, h * 0.34f),
-        size = Size(w * 0.48f, h * 0.32f),
-        cornerRadius = CornerRadius(14f, 14f),
-        style = Stroke(width = 4f)
-    )
-
-    // Iconic Clash King Mustache & Beard Emblem
-    val beardPath = Path().apply {
-        moveTo(w * 0.34f, h * 0.42f)
-        quadraticBezierTo(w * 0.50f, h * 0.36f, w * 0.66f, h * 0.42f)
-        quadraticBezierTo(w * 0.62f, h * 0.58f, w * 0.50f, h * 0.58f)
-        quadraticBezierTo(w * 0.38f, h * 0.58f, w * 0.34f, h * 0.42f)
-        close()
-    }
-    drawPath(beardPath, color = Color(0xFF263238))
-    drawPath(beardPath, color = outline, style = Stroke(width = 3.5f))
-
-    // Chunky Golden Crown
-    val crownPath = Path().apply {
-        moveTo(w * 0.28f, h * 0.35f)
-        lineTo(w * 0.24f, h * 0.18f)
-        lineTo(w * 0.38f, h * 0.25f)
-        lineTo(w * 0.50f, h * 0.16f)
-        lineTo(w * 0.62f, h * 0.25f)
-        lineTo(w * 0.76f, h * 0.18f)
-        lineTo(w * 0.72f, h * 0.35f)
-        close()
-    }
-    drawPath(
-        path = crownPath,
-        brush = Brush.verticalGradient(listOf(Color(0xFFFFEE58), Color(0xFFFFB300), Color(0xFFF57F17)))
-    )
-    drawPath(path = crownPath, color = outline, style = Stroke(width = 4f))
-
-    // Royal Cross Finial at the Very Top
-    val crossWidth = w * 0.055f
-    // Vertical bar
-    drawRoundRect(
-        color = Color(0xFFFFD54F),
-        topLeft = Offset(w * 0.5f - crossWidth / 2f, h * 0.02f),
-        size = Size(crossWidth, h * 0.15f),
-        cornerRadius = CornerRadius(4f, 4f)
-    )
-    drawRoundRect(
-        color = outline,
-        topLeft = Offset(w * 0.5f - crossWidth / 2f, h * 0.02f),
-        size = Size(crossWidth, h * 0.15f),
-        cornerRadius = CornerRadius(4f, 4f),
-        style = Stroke(width = 3f)
-    )
-    // Horizontal bar
-    drawRoundRect(
-        color = Color(0xFFFFD54F),
-        topLeft = Offset(w * 0.40f, h * 0.06f),
-        size = Size(w * 0.20f, crossWidth),
-        cornerRadius = CornerRadius(4f, 4f)
-    )
-    drawRoundRect(
-        color = outline,
-        topLeft = Offset(w * 0.40f, h * 0.06f),
-        size = Size(w * 0.20f, crossWidth),
-        cornerRadius = CornerRadius(4f, 4f),
-        style = Stroke(width = 3f)
-    )
-
-    // Center Red Ruby in Crown
-    drawCircle(
-        color = Color(0xFFFF1744),
-        radius = w * 0.045f,
-        center = Offset(w * 0.50f, h * 0.27f)
-    )
-    drawCircle(
-        color = outline,
-        radius = w * 0.045f,
-        center = Offset(w * 0.50f, h * 0.27f),
-        style = Stroke(width = 2.5f)
-    )
-}
-
-/**
- * Complete Clash Royale Battle Arena Chessboard with:
- * - Stone arena walls, 8x8 emerald/lime grass tiles, and a central river with bridges
- * - Interactive tap-to-move, tap-to-capture, and card deployment from the bottom Elixir dock
- * - Real-time Spawn & Capture particle bursts
- */
 @Composable
-fun ClashBattleArenaScreen(
-    modifier: Modifier = Modifier
-) {
+fun ClashBattleArenaScreen(modifier: Modifier = Modifier) {
     var pieces by remember { mutableStateOf(createInitialArenaPieces()) }
     var selectedPieceId by remember { mutableStateOf<String?>(null) }
     var selectedDeployCard by remember { mutableStateOf<ChessPieceType?>(null) }
@@ -990,40 +825,28 @@ fun ClashBattleArenaScreen(
     var elixir by remember { mutableStateOf(7) }
     var blueCrowns by remember { mutableStateOf(1) }
     var redCrowns by remember { mutableStateOf(0) }
-    var battleBannerText by remember { mutableStateOf("TAP A PIECE TO MOVE OR DEPLOY A CARD!") }
+    var battleBannerText by remember { mutableStateOf("TAP A PIECE TO MOVE OR DEPLOY") }
 
-    // Regenerate Elixir smoothly over time like Clash Royale
     LaunchedEffect(Unit) {
         while (true) {
             delay(1800)
-            if (elixir < 10) {
-                elixir += 1
-            }
+            if (elixir < 10) elixir += 1
         }
     }
 
     val selectedPiece = pieces.find { it.id == selectedPieceId }
-    val validTargetSquares = remember(selectedPiece, pieces) {
-        if (selectedPiece != null) {
-            calculateValidMoves(selectedPiece, pieces)
-        } else {
-            emptySet()
-        }
+    val validTargets = remember(selectedPiece, pieces) {
+        selectedPiece?.let { calculateValidMoves(it, pieces) } ?: emptySet()
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF0D1520), Color(0xFF172334), Color(0xFF0E1621))
-                )
-            )
+            .background(Brush.verticalGradient(listOf(Color(0xFF0D1520), Color(0xFF172334), Color(0xFF0E1621))))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // 1. Top Opponent HUD & Crown Scoreboard
         ClashBattleTopHud(
             redCrowns = redCrowns,
             blueCrowns = blueCrowns,
@@ -1035,11 +858,10 @@ fun ClashBattleArenaScreen(
                 elixir = 8
                 blueCrowns = 0
                 redCrowns = 0
-                battleBannerText = "ARENA RESET! FIGHT!"
+                battleBannerText = "ARENA RESET"
             }
         )
 
-        // 2. 8x8 Clash Royale Arena Chessboard
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1047,170 +869,98 @@ fun ClashBattleArenaScreen(
                 .shadow(14.dp, RoundedCornerShape(18.dp))
                 .clip(RoundedCornerShape(18.dp))
                 .background(Color(0xFF37474F))
-                .border(
-                    width = 5.dp,
-                    brush = Brush.verticalGradient(
-                        listOf(Color(0xFF90A4AE), Color(0xFF455A64), Color(0xFF263238))
-                    ),
-                    shape = RoundedCornerShape(18.dp)
-                )
+                .border(5.dp, Brush.verticalGradient(listOf(Color(0xFF90A4AE), Color(0xFF455A64), Color(0xFF263238))), RoundedCornerShape(18.dp))
                 .padding(8.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
                 for (row in 0 until 8) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
                         for (col in 0 until 8) {
-                            val isLightTile = (row + col) % 2 == 0
-                            val pieceAtSquare = pieces.find { it.row == row && it.col == col }
-                            val isSelected = pieceAtSquare?.id == selectedPieceId
-                            val isValidTarget = validTargetSquares.contains(row to col)
-                            val isDeployTarget = selectedDeployCard != null &&
-                                    row in 4..7 && pieceAtSquare == null
+                            val isLight = (row + col) % 2 == 0
+                            val piece = pieces.find { it.row == row && it.col == col }
+                            val isSelected = piece?.id == selectedPieceId
+                            val isValid = validTargets.contains(row to col)
+                            val isDeploy = selectedDeployCard != null && row in 4..7 && piece == null
 
                             ArenaBoardTile(
                                 row = row,
                                 col = col,
-                                isLightTile = isLightTile,
+                                isLightTile = isLight,
                                 isSelected = isSelected,
-                                isValidMove = isValidTarget && pieceAtSquare == null,
-                                isValidCapture = isValidTarget && pieceAtSquare != null,
-                                isDeployHighlight = isDeployTarget,
-                                piece = pieceAtSquare,
+                                isValidMove = isValid && piece == null,
+                                isValidCapture = isValid && piece != null,
+                                isDeployHighlight = isDeploy,
+                                piece = piece,
                                 effects = activeEffects.filter { it.row == row && it.col == col },
-                                onEffectDone = { effectId ->
-                                    activeEffects = activeEffects.filterNot { it.id == effectId }
-                                },
+                                onEffectDone = { id -> activeEffects = activeEffects.filterNot { it.id == id } },
                                 onClick = {
-                                    // Case A: Deploying a selected card from the dock onto an empty friendly square
-                                    val cardToDeploy = selectedDeployCard
-                                    if (cardToDeploy != null && row in 4..7 && pieceAtSquare == null) {
-                                        if (elixir >= cardToDeploy.defaultElixir) {
-                                            elixir -= cardToDeploy.defaultElixir
-                                            val newPiece = ArenaPiece(
-                                                id = "deploy_${System.currentTimeMillis()}",
-                                                type = cardToDeploy,
+                                    val card = selectedDeployCard
+                                    if (card != null && row in 4..7 && piece == null) {
+                                        if (elixir >= card.defaultElixir) {
+                                            elixir -= card.defaultElixir
+                                            pieces = pieces + ArenaPiece(
+                                                id = "d_${System.currentTimeMillis()}",
+                                                type = card,
                                                 team = PieceTeam.BLUE,
                                                 row = row,
                                                 col = col,
+                                                level = 11,
                                                 animState = PieceAnimState.SPAWNING
                                             )
-                                            pieces = pieces + newPiece
-                                            activeEffects = activeEffects + SquareEffect(
-                                                id = System.nanoTime(),
-                                                row = row,
-                                                col = col,
-                                                isCapture = false,
-                                                team = PieceTeam.BLUE
-                                            )
-                                            battleBannerText = "DEPLOYED ${cardToDeploy.displayName.uppercase()}!"
+                                            activeEffects = activeEffects + SquareEffect(System.nanoTime(), row, col, false, PieceTeam.BLUE)
+                                            battleBannerText = "DEPLOYED ${card.displayName}"
                                             selectedDeployCard = null
                                         } else {
-                                            battleBannerText = "NOT ENOUGH ELIXIR (${cardToDeploy.defaultElixir} NEEDED)!"
+                                            battleBannerText = "NEED ${card.defaultElixir} ELIXIR"
                                         }
                                         return@ArenaBoardTile
                                     }
-
-                                    // Case B: Moving or Capturing with an already-selected board piece
-                                    if (selectedPiece != null && isValidTarget) {
-                                        val capturedPiece = pieceAtSquare
+                                    if (selectedPiece != null && isValid) {
+                                        val captured = piece
                                         pieces = pieces
-                                            .filterNot { it.id == capturedPiece?.id }
+                                            .filterNot { it.id == captured?.id }
                                             .map {
                                                 if (it.id == selectedPiece.id) {
-                                                    // Pawn promotion to Archer Queen at row 0 or 7
-                                                    val promotedType = if (
-                                                        it.type == ChessPieceType.PAWN &&
-                                                        (row == 0 || row == 7)
-                                                    ) ChessPieceType.QUEEN else it.type
-
+                                                    val promo = if (it.type == ChessPieceType.PAWN && (row == 0 || row == 7)) ChessPieceType.QUEEN else it.type
                                                     it.copy(
                                                         row = row,
                                                         col = col,
-                                                        type = promotedType,
-                                                        animState = if (capturedPiece != null) {
-                                                            PieceAnimState.ATTACKING
-                                                        } else {
-                                                            PieceAnimState.SPAWNING
-                                                        }
+                                                        type = promo,
+                                                        animState = if (captured != null) PieceAnimState.ATTACKING else PieceAnimState.SPAWNING
                                                     )
                                                 } else it
                                             }
-
-                                        if (capturedPiece != null) {
-                                            activeEffects = activeEffects + SquareEffect(
-                                                id = System.nanoTime(),
-                                                row = row,
-                                                col = col,
-                                                isCapture = true,
-                                                team = selectedPiece.team
-                                            )
-                                            if (selectedPiece.team == PieceTeam.BLUE) {
-                                                blueCrowns = (blueCrowns + 1).coerceAtMost(3)
-                                            } else {
-                                                redCrowns = (redCrowns + 1).coerceAtMost(3)
-                                            }
-                                            battleBannerText =
-                                                "${selectedPiece.type.name} CAPTURED ${capturedPiece.type.name}!"
-                                        } else {
-                                            activeEffects = activeEffects + SquareEffect(
-                                                id = System.nanoTime(),
-                                                row = row,
-                                                col = col,
-                                                isCapture = false,
-                                                team = selectedPiece.team
-                                            )
-                                            battleBannerText =
-                                                "${selectedPiece.type.displayName} -> (${row + 1}, ${col + 1})"
+                                        if (captured != null) {
+                                            activeEffects = activeEffects + SquareEffect(System.nanoTime(), row, col, true, selectedPiece.team)
+                                            if (selectedPiece.team == PieceTeam.BLUE) blueCrowns = (blueCrowns + 1).coerceAtMost(3)
+                                            else redCrowns = (redCrowns + 1).coerceAtMost(3)
+                                            battleBannerText = "${selectedPiece.type.name} CAPTURED ${captured.type.name}"
                                         }
                                         selectedPieceId = null
                                         return@ArenaBoardTile
                                     }
-
-                                    // Case C: Selecting a piece on the board
-                                    if (pieceAtSquare != null) {
+                                    if (piece != null) {
                                         selectedDeployCard = null
-                                        selectedPieceId =
-                                            if (selectedPieceId == pieceAtSquare.id) null else pieceAtSquare.id
-                                        battleBannerText =
-                                            "SELECTED ${pieceAtSquare.team.name} ${pieceAtSquare.type.displayName.uppercase()}"
-                                    } else {
-                                        selectedPieceId = null
-                                    }
+                                        selectedPieceId = if (selectedPieceId == piece.id) null else piece.id
+                                        battleBannerText = "SELECTED ${piece.type.displayName} LVL ${piece.level}"
+                                    } else selectedPieceId = null
                                 },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
+                                modifier = Modifier.weight(1f).fillMaxHeight()
                             )
                         }
                     }
                 }
             }
-
-            // Central Clash Royale River & Wooden Bridges Overlay (between rows 3 and 4)
-            ClashRiverDividerOverlay(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(14.dp)
-                    .align(Alignment.Center)
-            )
+            ClashRiverDividerOverlay(Modifier.fillMaxWidth().height(12.dp).align(Alignment.Center))
         }
 
-        // 3. Bottom Clash Royale Elixir Bar & Card Deployment Hand
         ClashElixirDeckDock(
             elixir = elixir,
             selectedCard = selectedDeployCard,
-            onSelectCard = { cardType ->
+            onSelectCard = { type ->
                 selectedPieceId = null
-                selectedDeployCard = if (selectedDeployCard == cardType) null else cardType
-                battleBannerText = if (selectedDeployCard != null) {
-                    "TAP ANY EMPTY BLUE TILE (BOTTOM HALF) TO SPAWN ${cardType.name}!"
-                } else {
-                    "CARD DESELECTED"
-                }
+                selectedDeployCard = if (selectedDeployCard == type) null else type
+                battleBannerText = if (selectedDeployCard != null) "TAP BLUE HALF TO SPAWN" else "DESELECTED"
             }
         )
     }
@@ -1231,8 +981,7 @@ private fun ArenaBoardTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Clash Royale lush grass colors (Red territory top half slightly warmer, Blue territory bottom half vibrant green)
-    val baseGrassColor = if (row < 4) {
+    val grass = if (row < 4) {
         if (isLightTile) Color(0xFF7CB342) else Color(0xFF689F38)
     } else {
         if (isLightTile) Color(0xFF8BC34A) else Color(0xFF7CB342)
@@ -1240,120 +989,62 @@ private fun ArenaBoardTile(
 
     Box(
         modifier = modifier
-            .background(baseGrassColor)
+            .background(grass)
             .then(
-                if (isSelected) {
-                    Modifier
-                        .background(Color(0x66FFEE58))
-                        .border(2.dp, Color(0xFFFFEE58))
-                } else if (isValidCapture) {
-                    Modifier
-                        .background(Color(0x66FF1744))
-                        .border(2.dp, Color(0xFFFF5252))
-                } else if (isDeployHighlight) {
-                    Modifier
-                        .background(Color(0x4400E5FF))
-                        .border(1.dp, Color(0x8800E5FF))
-                } else {
-                    Modifier
+                when {
+                    isSelected -> Modifier.background(Color(0x66FFEE58)).border(2.dp, Color(0xFFFFEE58))
+                    isValidCapture -> Modifier.background(Color(0x66FF1744)).border(2.dp, Color(0xFFFF5252))
+                    isDeployHighlight -> Modifier.background(Color(0x4400E5FF)).border(1.dp, Color(0x8800E5FF))
+                    else -> Modifier
                 }
             )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        // Valid Move Indicator Dot
         if (isValidMove) {
-            Canvas(modifier = Modifier.size(16.dp)) {
-                drawCircle(
-                    color = Color(0xAA111722),
-                    radius = size.minDimension / 2f
-                )
-                drawCircle(
-                    color = Color(0xFFFFEE58),
-                    radius = size.minDimension / 3f
-                )
+            Canvas(Modifier.size(14.dp)) {
+                drawCircle(Color(0xAA111722), size.minDimension / 2f)
+                drawCircle(Color(0xFFFFEE58), size.minDimension / 3f)
             }
         }
-
-        // Valid Capture Crosshair Ring
         if (isValidCapture) {
-            Canvas(modifier = Modifier.fillMaxSize().padding(3.dp)) {
-                drawCircle(
-                    color = Color(0xFFFF1744),
-                    style = Stroke(width = 5f)
-                )
+            Canvas(Modifier.fillMaxSize().padding(3.dp)) {
+                drawCircle(Color(0xFFFF1744), style = Stroke(width = 4f))
             }
         }
-
-        // Render Chess Piece if present on this square
-        if (piece != null) {
-            key(piece.id) {
+        piece?.let {
+            key(it.id) {
                 CharacterVisualView(
-                    pieceType = piece.type,
-                    team = piece.team,
+                    pieceType = it.type,
+                    team = it.team,
+                    level = it.level,
                     isAnimated = true,
-                    animState = piece.animState,
-                    showHpBar = piece.type == ChessPieceType.KING || piece.type == ChessPieceType.ROOK,
-                    hpProgress = piece.hp,
-                    size = 44.dp
+                    animState = it.animState,
+                    showHpBar = it.type == ChessPieceType.KING || it.type == ChessPieceType.ROOK,
+                    hpProgress = it.hp,
+                    size = 42.dp
                 )
             }
         }
-
-        // Render Spawn / Capture Particle Effects
-        effects.forEach { effect ->
-            key(effect.id) {
-                ArenaParticleEffectOverlay(
-                    isCapture = effect.isCapture,
-                    team = effect.team,
-                    onEffectComplete = { onEffectDone(effect.id) }
-                )
+        effects.forEach { e ->
+            key(e.id) {
+                ArenaParticleEffectOverlay(e.isCapture, e.team) { onEffectDone(e.id) }
             }
         }
     }
 }
 
-/**
- * Decorative Clash Royale River & Dual Bridges across the middle of the 8x8 chessboard.
- */
 @Composable
 private fun ClashRiverDividerOverlay(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-
-        // River Water Strip
+    Canvas(modifier) {
         drawRect(
-            brush = Brush.verticalGradient(
-                listOf(Color(0xCC0288D1), Color(0xEE29B6F6), Color(0xCC0288D1))
-            ),
-            topLeft = Offset(0f, 0f),
-            size = Size(w, h)
+            brush = Brush.verticalGradient(listOf(Color(0xCC0288D1), Color(0xEE29B6F6), Color(0xCC0288D1))),
+            size = size
         )
-
-        // Left & Right Wooden Arena Bridges (aligned with columns 1-2 and 5-6)
-        val bridgeWidth = w * 0.20f
-        val leftBridgeX = w * 0.14f
-        val rightBridgeX = w * 0.66f
-
-        listOf(leftBridgeX, rightBridgeX).forEach { bx ->
-            drawRoundRect(
-                color = Color(0xFF8D6E63),
-                topLeft = Offset(bx, -2f),
-                size = Size(bridgeWidth, h + 4f),
-                cornerRadius = CornerRadius(4f, 4f)
-            )
-            drawRoundRect(
-                color = Color(0xFF4E342E),
-                topLeft = Offset(bx, -2f),
-                size = Size(bridgeWidth, h + 4f),
-                cornerRadius = CornerRadius(4f, 4f),
-                style = Stroke(width = 2.5f)
-            )
+        val bw = size.width * 0.18f
+        listOf(size.width * 0.15f, size.width * 0.67f).forEach { x ->
+            drawRoundRect(Color(0xFF8D6E63), Offset(x, -1f), Size(bw, size.height + 2f), CornerRadius(3f, 3f))
+            drawRoundRect(Color(0xFF4E342E), Offset(x, -1f), Size(bw, size.height + 2f), CornerRadius(3f, 3f), style = Stroke(2f))
         }
     }
 }
@@ -1365,81 +1056,29 @@ private fun ClashBattleTopHud(
     statusBanner: String,
     onResetBoard: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
-            modifier = Modifier
+            Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF1E293B), RoundedCornerShape(12.dp))
                 .border(1.5.dp, Color(0xFF475569), RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Red Team Badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(PieceTeam.RED.primary, CircleShape)
-                )
-                Text(
-                    text = "RED KING: $redCrowns 👑",
-                    color = Color(0xFFEF5350),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black
-                )
-            }
-
-            // Reset / Demo FX Button
+            Text("RED $redCrowns", color = Color(0xFFEF5350), fontSize = 12.sp, fontWeight = FontWeight.Black)
             Box(
-                modifier = Modifier
+                Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFFFFB300))
                     .clickable { onResetBoard() }
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
-                Text(
-                    text = "RESET ARENA",
-                    color = Color(0xFF111722),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Black
-                )
+                Text("RESET", color = Color(0xFF111722), fontSize = 10.sp, fontWeight = FontWeight.Black)
             }
-
-            // Blue Team Badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "👑 $blueCrowns :BLUE KING",
-                    color = Color(0xFF64B5F6),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black
-                )
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(PieceTeam.BLUE.primary, CircleShape)
-                )
-            }
+            Text("$blueCrowns BLUE", color = Color(0xFF64B5F6), fontSize = 12.sp, fontWeight = FontWeight.Black)
         }
-
-        // Action Banner
-        Text(
-            text = statusBanner,
-            color = Color(0xFFFFD54F),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 1
-        )
+        Text(statusBanner, color = Color(0xFFFFD54F), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
     }
 }
 
@@ -1449,7 +1088,7 @@ private fun ClashElixirDeckDock(
     selectedCard: ChessPieceType?,
     onSelectCard: (ChessPieceType) -> Unit
 ) {
-    val handCards = remember {
+    val hand = remember {
         listOf(
             Triple(ChessPieceType.PAWN, CardRarity.COMMON, 11),
             Triple(ChessPieceType.KNIGHT, CardRarity.RARE, 12),
@@ -1457,23 +1096,17 @@ private fun ClashElixirDeckDock(
             Triple(ChessPieceType.QUEEN, CardRarity.LEGENDARY, 14)
         )
     }
-
     Column(
-        modifier = Modifier
+        Modifier
             .fillMaxWidth()
             .background(Color(0xFF1A2433), RoundedCornerShape(16.dp))
             .border(2.dp, Color(0xFF334155), RoundedCornerShape(16.dp))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // 4-Card Clash Royale Battle Hand
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            handCards.forEach { (type, rarity, lvl) ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            hand.forEach { (type, rarity, lvl) ->
                 ClashChessCard(
                     pieceType = type,
                     team = PieceTeam.BLUE,
@@ -1485,44 +1118,27 @@ private fun ClashElixirDeckDock(
                 )
             }
         }
-
-        // 10-Slot Segmented Purple Elixir Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ElixirBadge(cost = elixir, modifier = Modifier.size(26.dp))
-
+        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ElixirBadge(elixir, Modifier.size(24.dp))
             Row(
-                modifier = Modifier
+                Modifier
                     .weight(1f)
-                    .height(14.dp)
-                    .clip(RoundedCornerShape(7.dp))
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(Color(0xFF0F172A))
-                    .border(1.dp, Color(0xFF4A0072), RoundedCornerShape(7.dp))
+                    .border(1.dp, Color(0xFF4A0072), RoundedCornerShape(6.dp))
                     .padding(2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(1.dp)
             ) {
-                for (i in 1..10) {
-                    val filled = i <= elixir
+                repeat(10) { i ->
                     Box(
-                        modifier = Modifier
+                        Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(3.dp))
+                            .clip(RoundedCornerShape(2.dp))
                             .background(
-                                if (filled) {
-                                    Brush.verticalGradient(
-                                        listOf(Color(0xFFEA80FC), Color(0xFFAA00FF))
-                                    )
-                                } else {
-                                    Brush.verticalGradient(
-                                        listOf(Color(0xFF1E293B), Color(0xFF0F172A))
-                                    )
-                                }
+                                if (i < elixir) Brush.verticalGradient(listOf(Color(0xFFEA80FC), Color(0xFFAA00FF)))
+                                else Brush.verticalGradient(listOf(Color(0xFF1E293B), Color(0xFF0F172A)))
                             )
                     )
                 }
@@ -1531,156 +1147,72 @@ private fun ClashElixirDeckDock(
     }
 }
 
-/**
- * Creates a balanced Clash Royale Chess formation so the user can immediately test moves & captures.
- */
 private fun createInitialArenaPieces(): List<ArenaPiece> {
-    val backRowOrder = listOf(
-        ChessPieceType.ROOK,
-        ChessPieceType.KNIGHT,
-        ChessPieceType.BISHOP,
-        ChessPieceType.QUEEN,
-        ChessPieceType.KING,
-        ChessPieceType.BISHOP,
-        ChessPieceType.KNIGHT,
-        ChessPieceType.ROOK
+    val back = listOf(
+        ChessPieceType.ROOK, ChessPieceType.KNIGHT, ChessPieceType.BISHOP, ChessPieceType.QUEEN,
+        ChessPieceType.KING, ChessPieceType.BISHOP, ChessPieceType.KNIGHT, ChessPieceType.ROOK
     )
-
     val list = mutableListOf<ArenaPiece>()
-
-    // Red Team (Top rows 0 and 1, with two advanced pawns for quick capture testing)
-    backRowOrder.forEachIndexed { col, type ->
-        list.add(ArenaPiece("red_back_$col", type, PieceTeam.RED, row = 0, col = col))
+    back.forEachIndexed { c, t -> list.add(ArenaPiece("r_b_$c", t, PieceTeam.RED, 0, c, level = 9)) }
+    for (c in 0 until 8) {
+        val r = if (c == 3 || c == 4) 3 else 1
+        list.add(ArenaPiece("r_p_$c", ChessPieceType.PAWN, PieceTeam.RED, r, c, level = 7))
     }
-    for (col in 0 until 8) {
-        val startRow = if (col == 3 || col == 4) 3 else 1
-        list.add(ArenaPiece("red_pawn_$col", ChessPieceType.PAWN, PieceTeam.RED, row = startRow, col = col))
+    for (c in 0 until 8) {
+        val r = if (c == 2 || c == 4) 4 else 6
+        list.add(ArenaPiece("b_p_$c", ChessPieceType.PAWN, PieceTeam.BLUE, r, c, level = 11))
     }
-
-    // Blue Team (Bottom rows 6 and 7, with two advanced center pawns ready to clash)
-    for (col in 0 until 8) {
-        val startRow = if (col == 2 || col == 4) 4 else 6
-        list.add(ArenaPiece("blue_pawn_$col", ChessPieceType.PAWN, PieceTeam.BLUE, row = startRow, col = col))
-    }
-    backRowOrder.forEachIndexed { col, type ->
-        list.add(ArenaPiece("blue_back_$col", type, PieceTeam.BLUE, row = 7, col = col))
-    }
-
+    back.forEachIndexed { c, t -> list.add(ArenaPiece("b_b_$c", t, PieceTeam.BLUE, 7, c, level = 13)) }
     return list
 }
 
-/**
- * Calculates valid chess moves and capture squares for the selected piece on the 8x8 board.
- */
-private fun calculateValidMoves(
-    piece: ArenaPiece,
-    allPieces: List<ArenaPiece>
-): Set<Pair<Int, Int>> {
+private fun calculateValidMoves(piece: ArenaPiece, all: List<ArenaPiece>): Set<Pair<Int, Int>> {
     val moves = mutableSetOf<Pair<Int, Int>>()
-    val boardMap = allPieces.associateBy { it.row to it.col }
-
-    fun addStepIfValid(r: Int, c: Int): Boolean {
+    val board = all.associateBy { it.row to it.col }
+    fun step(r: Int, c: Int): Boolean {
         if (r !in 0..7 || c !in 0..7) return false
-        val occupant = boardMap[r to c]
-        return if (occupant == null) {
-            moves.add(r to c)
-            true
-        } else {
-            if (occupant.team != piece.team) {
-                moves.add(r to c)
-            }
-            false
-        }
+        val occ = board[r to c]
+        return if (occ == null) { moves.add(r to c); true }
+        else { if (occ.team != piece.team) moves.add(r to c); false }
     }
-
-    fun traceRay(dr: Int, dc: Int) {
+    fun ray(dr: Int, dc: Int) {
         var r = piece.row + dr
         var c = piece.col + dc
-        while (addStepIfValid(r, c)) {
-            r += dr
-            c += dc
-        }
+        while (step(r, c)) { r += dr; c += dc }
     }
-
     when (piece.type) {
         ChessPieceType.PAWN -> {
             val dir = if (piece.team == PieceTeam.BLUE) -1 else 1
-            val startRow = if (piece.team == PieceTeam.BLUE) 6 else 1
-            val nextRow = piece.row + dir
-            // 1 step forward
-            if (nextRow in 0..7 && boardMap[nextRow to piece.col] == null) {
-                moves.add(nextRow to piece.col)
-                // 2 steps from starting rank
-                val twoStepRow = piece.row + dir * 2
-                if (piece.row == startRow && boardMap[twoStepRow to piece.col] == null) {
-                    moves.add(twoStepRow to piece.col)
-                }
+            val start = if (piece.team == PieceTeam.BLUE) 6 else 1
+            val next = piece.row + dir
+            if (next in 0..7 && board[next to piece.col] == null) {
+                moves.add(next to piece.col)
+                if (piece.row == start && board[piece.row + dir * 2 to piece.col] == null)
+                    moves.add(piece.row + dir * 2 to piece.col)
             }
-            // Diagonal captures
-            listOf(piece.col - 1, piece.col + 1).forEach { diagCol ->
-                val target = boardMap[nextRow to diagCol]
-                if (target != null && target.team != piece.team) {
-                    moves.add(nextRow to diagCol)
-                }
+            listOf(piece.col - 1, piece.col + 1).forEach { dc ->
+                val t = board[next to dc]
+                if (t != null && t.team != piece.team) moves.add(next to dc)
             }
         }
-
-        ChessPieceType.KNIGHT -> {
-            val offsets = listOf(
-                -2 to -1, -2 to 1,
-                -1 to -2, -1 to 2,
-                1 to -2, 1 to 2,
-                2 to -1, 2 to 1
-            )
-            offsets.forEach { (dr, dc) ->
-                addStepIfValid(piece.row + dr, piece.col + dc)
-            }
-        }
-
-        ChessPieceType.BISHOP -> {
-            traceRay(-1, -1)
-            traceRay(-1, 1)
-            traceRay(1, -1)
-            traceRay(1, 1)
-        }
-
-        ChessPieceType.ROOK -> {
-            traceRay(-1, 0)
-            traceRay(1, 0)
-            traceRay(0, -1)
-            traceRay(0, 1)
-        }
-
+        ChessPieceType.KNIGHT -> listOf(-2 to -1, -2 to 1, -1 to -2, -1 to 2, 1 to -2, 1 to 2, 2 to -1, 2 to 1)
+            .forEach { (dr, dc) -> step(piece.row + dr, piece.col + dc) }
+        ChessPieceType.BISHOP -> { ray(-1, -1); ray(-1, 1); ray(1, -1); ray(1, 1) }
+        ChessPieceType.ROOK -> { ray(-1, 0); ray(1, 0); ray(0, -1); ray(0, 1) }
         ChessPieceType.QUEEN -> {
-            traceRay(-1, -1); traceRay(-1, 1); traceRay(1, -1); traceRay(1, 1)
-            traceRay(-1, 0); traceRay(1, 0); traceRay(0, -1); traceRay(0, 1)
+            ray(-1, -1); ray(-1, 1); ray(1, -1); ray(1, 1)
+            ray(-1, 0); ray(1, 0); ray(0, -1); ray(0, 1)
         }
-
-        ChessPieceType.KING -> {
-            for (dr in -1..1) {
-                for (dc in -1..1) {
-                    if (dr != 0 || dc != 0) {
-                        addStepIfValid(piece.row + dr, piece.col + dc)
-                    }
-                }
-            }
-        }
+        ChessPieceType.KING -> for (dr in -1..1) for (dc in -1..1) if (dr != 0 || dc != 0) step(piece.row + dr, piece.col + dc)
     }
-
     return moves
 }
 
-/**
- * Interactive Preview showcasing the Clash Royale Battle Arena Chessboard, Particle Effects, and Deck Dock.
- */
 @Preview(showBackground = true, backgroundColor = 0xFF0D1520, widthDp = 420, heightDp = 760)
 @Composable
 fun ClashRoyaleChessPiecesPreview() {
     MaterialTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color(0xFF0D1520)
-        ) {
+        Surface(Modifier.fillMaxSize(), color = Color(0xFF0D1520)) {
             ClashBattleArenaScreen()
         }
     }
