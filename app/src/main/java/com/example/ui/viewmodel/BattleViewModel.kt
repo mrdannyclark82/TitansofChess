@@ -39,6 +39,8 @@ data class BattleRuntimeState(
 
 class BattleViewModel : ViewModel() {
 
+    private fun levelFor(cardId: String?): Int = playerCardLevels[cardId] ?: 1
+
     private val _isBattleActive = MutableStateFlow(false)
     val isBattleActive = _isBattleActive.asStateFlow()
 
@@ -66,6 +68,8 @@ class BattleViewModel : ViewModel() {
     private val _selectedHandCardId = MutableStateFlow<String?>(null)
     val selectedHandCardId = _selectedHandCardId.asStateFlow()
 
+    private var playerCardLevels: Map<String, Int> = emptyMap()
+
     private val _matchTimerSeconds = MutableStateFlow(180)
     val matchTimerSeconds = _matchTimerSeconds.asStateFlow()
 
@@ -76,7 +80,8 @@ class BattleViewModel : ViewModel() {
         arenaId: String,
         deckCardIds: List<String>,
         opponentName: String,
-        opponentTrophies: Int
+        opponentTrophies: Int,
+        cardLevels: Map<String, Int> = emptyMap()
     ) {
         _isBattleActive.value = true
         _battleState.value = BattleRuntimeState(
@@ -93,6 +98,7 @@ class BattleViewModel : ViewModel() {
         _enemyTowers.value = TowersState(3200, 1800, 1800)
         _matchTimerSeconds.value = 180
         _selectedHandCardId.value = null
+        playerCardLevels = cardLevels
 
         val safeDeck = if (deckCardIds.isEmpty()) {
             listOf("card_hierophant", "card_knight_paladin", "card_siege_rook", "card_pawn_sentinels")
@@ -101,12 +107,10 @@ class BattleViewModel : ViewModel() {
         }
         _battleDeck.value = safeDeck
 
-        // Initialize Chess Board with classic starting tactical setups
         val cells = mutableListOf<BoardCell>()
         for (r in 0..7) {
             for (c in 0..7) {
                 val piece = when {
-                    // Enemy starting pieces (Row 0, 1)
                     r == 0 && (c == 0 || c == 7) -> BoardCell(r, c, "🏰", "card_siege_rook", isPlayerPiece = false, level = 9)
                     r == 0 && (c == 1 || c == 6) -> BoardCell(r, c, "🐎", "card_knight_paladin", isPlayerPiece = false, level = 9)
                     r == 0 && (c == 2 || c == 5) -> BoardCell(r, c, "🔮", "card_hierophant", isPlayerPiece = false, level = 8)
@@ -114,13 +118,12 @@ class BattleViewModel : ViewModel() {
                     r == 0 && c == 4 -> BoardCell(r, c, "🤴", "enemy_king", isPlayerPiece = false, level = 9)
                     r == 1 -> BoardCell(r, c, "🛡️", "card_pawn_sentinels", isPlayerPiece = false, level = 7)
 
-                    // Player starting pieces (Row 6, 7)
-                    r == 6 -> BoardCell(r, c, "🛡️", "card_pawn_sentinels", isPlayerPiece = true, level = 11)
-                    r == 7 && (c == 0 || c == 7) -> BoardCell(r, c, "🏰", "card_siege_rook", isPlayerPiece = true, level = 13)
-                    r == 7 && (c == 1 || c == 6) -> BoardCell(r, c, "🐎", "card_knight_paladin", isPlayerPiece = true, level = 12)
-                    r == 7 && (c == 2 || c == 5) -> BoardCell(r, c, "🔮", "card_hierophant", isPlayerPiece = true, level = 13)
-                    r == 7 && c == 3 -> BoardCell(r, c, "⚔️", "card_queen_valkyrie", isPlayerPiece = true, level = 14)
-                    r == 7 && c == 4 -> BoardCell(r, c, "🤴", "player_king", isPlayerPiece = true, level = 14)
+                    r == 6 -> BoardCell(r, c, "🛡️", "card_pawn_sentinels", isPlayerPiece = true, level = levelFor("card_pawn_sentinels"))
+                    r == 7 && (c == 0 || c == 7) -> BoardCell(r, c, "🏰", "card_siege_rook", isPlayerPiece = true, level = levelFor("card_siege_rook"))
+                    r == 7 && (c == 1 || c == 6) -> BoardCell(r, c, "🐎", "card_knight_paladin", isPlayerPiece = true, level = levelFor("card_knight_paladin"))
+                    r == 7 && (c == 2 || c == 5) -> BoardCell(r, c, "🔮", "card_hierophant", isPlayerPiece = true, level = levelFor("card_hierophant"))
+                    r == 7 && c == 3 -> BoardCell(r, c, "⚔️", "card_queen_valkyrie", isPlayerPiece = true, level = levelFor("card_queen_valkyrie"))
+                    r == 7 && c == 4 -> BoardCell(r, c, "🤴", "player_king", isPlayerPiece = true, level = levelFor("card_royal_guardian").coerceAtLeast(1))
 
                     else -> BoardCell(r, c)
                 }
@@ -140,7 +143,6 @@ class BattleViewModel : ViewModel() {
             while (_isBattleActive.value && !_battleState.value.isGameOver) {
                 delay(1000)
 
-                // Regenerate Elixir (up to 10)
                 if (_currentElixir.value < 10f) {
                     _currentElixir.value = (_currentElixir.value + 0.35f).coerceAtMost(10f)
                 }
@@ -148,27 +150,22 @@ class BattleViewModel : ViewModel() {
                     enemyElixir = (enemyElixir + 0.38f).coerceAtMost(10f)
                 }
 
-                // Charge hero energy
                 if (_heroEnergy.value < 100) {
                     _heroEnergy.value = (_heroEnergy.value + 4).coerceAtMost(100)
                 }
 
-                // Tick timer
                 if (_matchTimerSeconds.value > 0) {
                     _matchTimerSeconds.value -= 1
                 } else {
-                    // Match timeout decision
                     val playerTotalHp = _playerTowers.value.kingTowerHp + _playerTowers.value.leftTowerHp + _playerTowers.value.rightTowerHp
                     val enemyTotalHp = _enemyTowers.value.kingTowerHp + _enemyTowers.value.leftTowerHp + _enemyTowers.value.rightTowerHp
                     endBattle(isVictory = playerTotalHp >= enemyTotalHp)
                 }
 
-                // AI Tactical Decision: Summon counter-pieces or attack
                 if (enemyElixir >= 4f && (1..4).random() == 1) {
                     performAiTacticalMove()
                 }
 
-                // Reset hit states
                 if (_playerTowers.value.isLeftHit || _playerTowers.value.isRightHit || _playerTowers.value.isKingHit) {
                     _playerTowers.value = _playerTowers.value.copy(isLeftHit = false, isRightHit = false, isKingHit = false)
                 }
@@ -186,7 +183,6 @@ class BattleViewModel : ViewModel() {
             if (enemyElixir >= card.elixirCost) {
                 enemyElixir -= card.elixirCost
 
-                // AI places pieces on rows 0-3
                 val targetRow = (0..2).random()
                 val targetCol = (0..7).random()
 
@@ -204,7 +200,6 @@ class BattleViewModel : ViewModel() {
                     _boardGrid.value = currentCells
                 }
 
-                // Damage player tower
                 val dmg = card.attack / 2
                 val currentPlayer = _playerTowers.value
                 _playerTowers.value = if (currentPlayer.leftTowerHp > 0) {
@@ -235,7 +230,6 @@ class BattleViewModel : ViewModel() {
             if (_currentElixir.value >= card.elixirCost) {
                 _currentElixir.value -= card.elixirCost
 
-                // Place player piece on board
                 val currentCells = _boardGrid.value.toMutableList()
                 val idx = currentCells.indexOfFirst { it.row == row && it.col == col }
                 if (idx != -1) {
@@ -245,14 +239,12 @@ class BattleViewModel : ViewModel() {
                         pieceSymbol = card.symbolChar,
                         pieceId = card.id,
                         isPlayerPiece = true,
-                        level = 11
+                        level = levelFor(card.id)
                     )
                     _boardGrid.value = currentCells
                 }
 
-                // Calculate Synergy Bonus
                 val synergy = if (card.pieceType == "QUEEN" || card.pieceType == "KING") 0.2f else 0f
-                // Apply damage to enemy tower based on card attack
                 val dmg = (card.attack * (1f + synergy)).toInt()
                 val currentEnemy = _enemyTowers.value
                 _enemyTowers.value = if (currentEnemy.leftTowerHp > 0) {
